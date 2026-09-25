@@ -1,0 +1,161 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  color-scheme: light;
+}
+
+code, .font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Crucial Leaflet tile and responsive container fixes */
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-tile-container img {
+  max-width: none !important;
+  max-height: none !important;
+}
+
+/* Custom Leaflet Map Container styles */
+.leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  background: #f1f5f9;
+  z-index: 10;
+  touch-action: pan-x pan-y;
+}
+
+/* Clean white styling for Leaflet controls */
+.leaflet-bar {
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+.leaflet-bar a {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  width: 34px !important;
+  height: 34px !important;
+  line-height: 34px !important;
+  font-weight: 700 !important;
+}
+
+.leaflet-bar a:hover {
+  background-color: #f8fafc !important;
+  color: #059669 !important;
+}
+
+.leaflet-container .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.85) !important;
+  color: #64748b !important;
+  font-size: 11px;
+  backdrop-filter: blur(6px);
+  border-top-left-radius: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-bottom: none;
+  border-right: none;
+}
+
+.leaflet-container .leaflet-control-attribution a {
+  color: #0284c7 !important;
+}
+
+/* Pulse animation for markers */
+@keyframes pinPulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 14px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.marker-pulse-emerald {
+  animation: pinPulse 2s infinite;
+}
+
+/* Clearly visible high-contrast scrollbar for laptops & desktops */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 9999px;
+  border: 2px solid #f8fafc;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Dedicated Print Stylesheet */
+@media print {
+  @page {
+    margin: 1cm;
+    size: auto;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    overflow: visible !important;
+  }
+
+  /* Completely suppress map panes, attributions, navigation, and background UI */
+  .leaflet-container,
+  .leaflet-pane,
+  .leaflet-control-container,
+  nav,
+  header,
+  footer,
+  .print-hidden,
+  .no-print {
+    display: none !important;
+  }
+
+  .print-modal-container {
+    position: static !important;
+    background: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    inset: auto !important;
+  }
+
+  .print-modal-card {
+    max-width: 100% !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+}
+
