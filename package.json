@@ -1,14 +1,22 @@
 {
   "name": "fuel-route-planner-mern",
   "version": "1.0.0",
-  "description": "Professional MERN Stack Free Map Route & Fuel Cost Calculator",
+  "description": "Sasta Safar - Smart Route & Fuel Cost Calculator",
   "scripts": {
     "start": "node backend/server.js",
     "server": "cd backend && node server.js",
     "client": "cd frontend && npm run dev",
-    "build": "cd frontend && npm run build"
+    "build": "cd frontend && npm install && npm run build"
+  },
+  "dependencies": {
+    "axios": "^1.20.0",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.3",
+    "express": "^5.2.1",
+    "mongoose": "^9.10.2",
+    "nodemailer": "^10.0.10"
   },
   "keywords": ["mern", "leaflet", "fuel-calculator", "osrm", "openstreetmap", "react"],
-  "author": "",
+  "author": "Sasta Safar Team",
   "license": "ISC"
 }

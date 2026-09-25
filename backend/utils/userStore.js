@@ -3,7 +3,8 @@ const path = require('path');
 const User = require('../models/User');
 const { getStatus } = require('../config/db');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DATA_DIR = isServerless ? path.join('/tmp', 'data') : path.join(__dirname, '..', 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const PENDING_FILE = path.join(DATA_DIR, 'pending_verifications.json');
 

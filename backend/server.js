@@ -41,10 +41,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Start DB & Server
-connectDB().finally(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Sasta Safar API Server running on port ${PORT}`);
-    console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
+// Start DB & Server if running standalone
+if (require.main === module || !process.env.VERCEL) {
+  connectDB().finally(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 Sasta Safar API Server running on port ${PORT}`);
+      console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
+    });
   });
-});
+} else {
+  // On serverless, initialize DB connection without blocking
+  connectDB().catch((err) => console.warn('[Serverless DB Warn]:', err.message));
+}
+
+module.exports = app;
