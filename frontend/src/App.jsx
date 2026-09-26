@@ -315,10 +315,10 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
+    <div className="bg-slate-50 text-slate-900 flex flex-col font-sans h-screen h-[100dvh] overflow-hidden">
       {/* Top Banner for Superadmin in Passenger App */}
       {isSuperAdminUser(currentUser) && (
-        <div className="bg-zinc-950 text-zinc-300 border-b border-zinc-800 px-4 py-2 text-xs flex items-center justify-between print:hidden z-30">
+        <div className="bg-zinc-950 text-zinc-300 border-b border-zinc-800 px-4 py-2 text-xs flex items-center justify-between print:hidden z-30 shrink-0">
           <div className="flex items-center space-x-2">
             <span className="w-2 h-2 rounded-full bg-amber-400"></span>
             <span className="font-medium text-zinc-200">
@@ -331,15 +331,16 @@ export default function App() {
           </div>
           <button
             onClick={() => setAdminViewActive(true)}
-            className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 rounded-md text-xs font-medium transition cursor-pointer flex items-center space-x-1.5"
+            className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 rounded-md text-xs font-medium transition cursor-pointer flex items-center space-x-1.5 shrink-0"
           >
-            <span>Return to Admin Console</span>
+            <span className="hidden sm:inline">Return to Admin Console</span>
+            <span className="sm:hidden">Admin</span>
             <span>&rarr;</span>
           </button>
         </div>
       )}
       {/* Top Navigation */}
-      <div className="print:hidden">
+      <div className="print:hidden shrink-0">
         <Navbar
           savedTripsCount={savedTrips.length}
           onOpenHistory={() => setIsHistoryOpen(true)}
@@ -355,7 +356,7 @@ export default function App() {
       </div>
 
       {/* Mobile Floating View Segmented Switcher */}
-      <div className="lg:hidden flex items-center justify-center p-2 bg-white border-b border-zinc-300 sticky top-16 z-20 shadow-xs print:hidden">
+      <div className="lg:hidden flex items-center justify-center p-2 bg-white border-b border-zinc-300 z-20 shadow-xs print:hidden shrink-0">
         <div className="bg-zinc-100 p-1 rounded-lg flex items-center space-x-1 w-full max-w-sm border border-zinc-300">
           <button
             onClick={() => setMobileTab('panel')}
@@ -386,10 +387,10 @@ export default function App() {
       </div>
 
       {/* Main App Container */}
-      <main className="flex-1 flex flex-col lg:flex-row h-[calc(100dvh-8.5rem)] lg:h-[calc(100vh-4rem)] overflow-hidden relative print:hidden">
+      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative print:hidden">
         {/* Left Side Control Panel / Responsive Sidebar */}
         <section
-          className={`w-full lg:w-[470px] xl:w-[500px] h-full overflow-y-auto p-4 sm:p-5 pb-28 lg:pb-16 flex flex-col space-y-4 border-r border-zinc-300 bg-white z-10 shrink-0 shadow-sm transition-all ${
+          className={`w-full lg:w-[470px] xl:w-[500px] h-full overflow-y-auto p-4 sm:p-5 flex flex-col space-y-4 border-r border-zinc-300 bg-white z-10 shrink-0 shadow-sm transition-all ${
             mobileTab === 'map' ? 'hidden lg:flex' : 'flex'
           }`}
         >

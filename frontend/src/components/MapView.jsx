@@ -193,7 +193,7 @@ export default function MapView({
       : null;
 
   return (
-    <div className="relative w-full h-full min-h-[420px] rounded-none sm:rounded-2xl overflow-hidden shadow-sm border-0 sm:border border-zinc-300 bg-white">
+    <div className="relative w-full h-full rounded-none sm:rounded-2xl overflow-hidden shadow-sm border-0 sm:border border-zinc-300 bg-white">
       {/* Floating Directions & Start Ride Navigation Bar (Top Left) */}
       {googleMapsUrl && (
         <div className="absolute top-3 left-3 z-20 print:hidden flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
