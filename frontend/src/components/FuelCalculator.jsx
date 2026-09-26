@@ -125,7 +125,7 @@ export default function FuelCalculator({
         <label className="block text-xs font-semibold text-zinc-700 mb-1.5">
           Vehicle Preset (Select or customize below)
         </label>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <div className="flex overflow-x-auto gap-2 pb-1 snap-x snap-mandatory scrollbar-none sm:grid sm:grid-cols-5">
           {presets.map((p) => {
             const Icon = p.icon;
             const isSelected = fuelAverage === p.avg;
@@ -134,7 +134,7 @@ export default function FuelCalculator({
                 key={p.name}
                 type="button"
                 onClick={() => handleSelectPreset(p)}
-                className={`p-2.5 rounded-lg text-left transition border flex flex-col justify-between cursor-pointer ${
+                className={`p-2.5 rounded-lg text-left transition border flex flex-col justify-between cursor-pointer snap-start min-w-[120px] sm:min-w-0 shrink-0 sm:shrink ${
                   isSelected
                     ? 'bg-white border-zinc-900 text-zinc-900 shadow-xs ring-1 ring-zinc-900'
                     : 'bg-zinc-50 hover:bg-white border-zinc-300 text-zinc-700 hover:text-zinc-950 hover:border-zinc-400'

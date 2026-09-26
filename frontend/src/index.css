@@ -159,3 +159,32 @@ code, .font-mono {
   }
 }
 
+/* Hide scrollbar for horizontal scroll containers */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* iOS safe area support for fixed/sticky bottom bars */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Prevent Leaflet tiles from having gaps on mobile */
+.leaflet-container {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Fix Leaflet zoom controls position to avoid bottom card overlap on mobile */
+@media (max-width: 1023px) {
+  .leaflet-top.leaflet-left {
+    top: auto !important;
+    bottom: 140px !important;
+    left: 8px !important;
+  }
+}

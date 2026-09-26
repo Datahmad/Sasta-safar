@@ -197,7 +197,7 @@ export default function MapView({
       {/* Floating Directions & Start Ride Navigation Bar (Top Left) */}
       {googleMapsUrl && (
         <div className="absolute top-3 left-3 z-20 print:hidden flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="bg-white/95 border border-zinc-300 backdrop-blur-md rounded-xl p-1.5 shadow-md flex items-center gap-1.5">
+          <div className="bg-white/95 border border-zinc-300 backdrop-blur-md rounded-xl p-1 sm:p-1.5 shadow-md flex items-center gap-1">
             {/* Start Ride on Google Maps */}
             <a
               href={googleMapsUrl}
@@ -207,7 +207,8 @@ export default function MapView({
               title="Open turn-by-turn driving GPS navigation in Google Maps"
             >
               <Navigation className="w-3.5 h-3.5 text-white shrink-0" />
-              <span>Google Maps</span>
+              <span className="hidden sm:inline">Google Maps</span>
+              <span className="sm:hidden">GMaps</span>
               <ExternalLink className="w-3 h-3 text-zinc-400 shrink-0" />
             </a>
 
@@ -220,14 +221,15 @@ export default function MapView({
               title="Open native turn-by-turn navigation in Apple Maps"
             >
               <Compass className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-              <span>Apple Maps</span>
+              <span className="hidden sm:inline">Apple Maps</span>
+              <span className="sm:hidden">Apple</span>
             </a>
           </div>
         </div>
       )}
 
       {/* Map Controls: Style Switcher & Recenter Pinpoints (Top Right) */}
-      <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-2 print:hidden">
+      <div className="absolute top-3 right-2 sm:right-3 z-20 flex flex-col items-end gap-1.5 print:hidden">
         <div className="bg-white/95 border border-zinc-300 backdrop-blur-md rounded-xl p-1 shadow-md flex items-center space-x-1 text-xs">
           <span className="text-xs text-zinc-500 font-semibold px-1.5 hidden md:inline uppercase">Map</span>
           {Object.entries(mapStyles).map(([key, style]) => (
@@ -302,8 +304,8 @@ export default function MapView({
 
       {/* Mobile-Only Route Switcher Floating Card (Phone interface only: lg:hidden) */}
       {routes && routes.length > 0 && (
-        <div className="absolute bottom-3 left-2.5 right-2.5 sm:left-4 sm:right-4 z-20 lg:hidden print:hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <div className="bg-white/95 backdrop-blur-md border border-zinc-300 shadow-2xl rounded-2xl p-3 space-y-2 ring-1 ring-zinc-900/10">
+        <div className="absolute bottom-2 left-2 right-2 sm:left-4 sm:right-4 z-20 lg:hidden print:hidden">
+          <div className="bg-white/95 backdrop-blur-md border border-zinc-300 shadow-2xl rounded-2xl p-2.5 space-y-1.5 ring-1 ring-zinc-900/10">
             {/* Top Bar inside Mobile Card */}
             <div className="flex items-center justify-between text-xs px-1">
               <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">

@@ -386,7 +386,7 @@ export default function App() {
       </div>
 
       {/* Main App Container */}
-      <main className="flex-1 flex flex-col lg:flex-row h-[calc(100dvh-7.5rem)] lg:h-[calc(100vh-4rem)] overflow-hidden relative print:hidden">
+      <main className="flex-1 flex flex-col lg:flex-row h-[calc(100dvh-8.5rem)] lg:h-[calc(100vh-4rem)] overflow-hidden relative print:hidden">
         {/* Left Side Control Panel / Responsive Sidebar */}
         <section
           className={`w-full lg:w-[470px] xl:w-[500px] h-full overflow-y-auto p-4 sm:p-5 pb-28 lg:pb-16 flex flex-col space-y-4 border-r border-zinc-300 bg-white z-10 shrink-0 shadow-sm transition-all ${
@@ -471,7 +471,7 @@ export default function App() {
           <div className="h-4 shrink-0"></div>
 
           {/* Sticky Quick-Jump & Report Bar for Laptop & Mobile Screens */}
-          <div className="sticky bottom-0 -mx-4 sm:-mx-5 -mb-4 sm:-mb-5 p-3.5 bg-white/95 backdrop-blur-md border-t border-zinc-200 shadow-sm flex items-center justify-between z-30">
+          <div className="sticky bottom-0 -mx-4 sm:-mx-5 -mb-4 sm:-mb-5 p-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] bg-white/95 backdrop-blur-md border-t border-zinc-200 shadow-sm flex items-center justify-between z-30">
             <div className="flex items-center space-x-2.5">
               <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
               <div>
@@ -494,7 +494,7 @@ export default function App() {
 
         {/* Right Area: Interactive Leaflet Map */}
         <section
-          className={`flex-1 h-full relative overflow-hidden bg-slate-100 p-0 sm:p-2 sm:rounded-2xl ${
+          className={`flex-1 h-full min-h-[300px] relative overflow-hidden bg-slate-100 p-0 sm:p-2 sm:rounded-2xl ${
             mobileTab === 'panel' ? 'hidden lg:block' : 'block'
           }`}
         >

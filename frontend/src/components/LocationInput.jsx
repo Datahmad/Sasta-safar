@@ -364,7 +364,7 @@ export default function LocationInput({
 
           {/* Origin Suggestions Dropdown with 3-Tier Hierarchy */}
           {originSuggestions.length > 0 && (
-            <ul className="absolute left-0 right-0 mt-1.5 bg-white border border-zinc-300 rounded-xl shadow-xl z-50 max-h-64 overflow-y-auto divide-y divide-zinc-100">
+            <ul className="absolute left-0 right-0 mt-1.5 bg-white border border-zinc-300 rounded-xl shadow-xl z-[100] max-h-64 overflow-y-auto divide-y divide-zinc-100">
               <li className="px-3.5 py-2 bg-zinc-50 text-xs font-bold text-zinc-600 flex items-center justify-between pointer-events-none border-b border-zinc-200">
                 <span>Priority: In-City &rarr; Regional &rarr; Global</span>
                 <span className="text-zinc-900 font-bold flex items-center gap-1">
@@ -464,7 +464,7 @@ export default function LocationInput({
 
           {/* Destination Suggestions Dropdown with 3-Tier Hierarchy */}
           {destSuggestions.length > 0 && (
-            <ul className="absolute left-0 right-0 mt-1.5 bg-white border border-zinc-300 rounded-xl shadow-xl z-50 max-h-64 overflow-y-auto divide-y divide-zinc-100">
+            <ul className="absolute left-0 right-0 mt-1.5 bg-white border border-zinc-300 rounded-xl shadow-xl z-[100] max-h-64 overflow-y-auto divide-y divide-zinc-100">
               <li className="px-3.5 py-2 bg-zinc-50 text-xs font-bold text-zinc-600 flex items-center justify-between pointer-events-none border-b border-zinc-200">
                 <span>Suggestions: In-City &rarr; Regional &rarr; Global</span>
                 <span className="text-zinc-900 font-bold flex items-center gap-1">

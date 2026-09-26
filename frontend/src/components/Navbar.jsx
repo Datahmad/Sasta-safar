@@ -40,9 +40,9 @@ export default function Navbar({
         </div>
       </div>
 
-      <div className="flex items-center space-x-2 sm:space-x-3">
+      <div className="flex items-center space-x-1.5 sm:space-x-3 overflow-x-auto scrollbar-none">
         {/* Currency Selector */}
-        <div className="flex items-center bg-white border border-zinc-300 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm shadow-2xs hover:border-zinc-400 transition">
+        <div className="flex items-center bg-white border border-zinc-300 rounded-lg px-1.5 sm:px-2.5 py-1.5 text-xs sm:text-sm shadow-2xs hover:border-zinc-400 transition shrink-0">
           <span className="text-zinc-500 mr-1.5 hidden md:inline text-xs font-medium">Currency:</span>
           <select
             value={currency}
@@ -79,7 +79,7 @@ export default function Navbar({
         {/* Saved Trips Drawer Trigger */}
         <button
           onClick={onOpenHistory}
-          className="relative flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-zinc-800 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-950 border border-zinc-300 transition cursor-pointer"
+          className="relative flex items-center space-x-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-zinc-800 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-950 border border-zinc-300 transition cursor-pointer shrink-0"
         >
           <History className="w-4 h-4 text-zinc-600" />
           <span className="hidden sm:inline">Saved Trips</span>
