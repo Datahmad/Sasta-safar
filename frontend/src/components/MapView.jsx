@@ -37,6 +37,34 @@ const createCustomPin = (label, colorBg, colorRing) => {
 const originIcon = createCustomPin('A', '#059669', '#10b981');
 const destinationIcon = createCustomPin('B', '#e11d48', '#f43f5e');
 
+const createCarIcon = (heading = 0) => {
+  return L.divIcon({
+    className: 'live-car-marker',
+    html: `
+      <div style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; transform: rotate(${heading}deg); transition: transform 0.25s linear;">
+        <div style="position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(16, 185, 129, 0.35); animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: #059669; border: 3px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.35);">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 19 21 12 17 5 21 12 2" fill="#ffffff" />
+          </svg>
+        </div>
+      </div>
+    `,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
+};
+
+function LiveMapFollower({ livePos }) {
+  const map = useMap();
+  useEffect(() => {
+    if (livePos && livePos.lat != null && livePos.lon != null) {
+      map.panTo([Number(livePos.lat), Number(livePos.lon)], { animate: true, duration: 0.4 });
+    }
+  }, [livePos, map]);
+  return null;
+}
+
 // Auto-center, invalidate-size and fit bounds component
 function MapBoundsUpdater({
   origin,
@@ -163,6 +191,8 @@ export default function MapView({
   currency,
   onOpenSteps,
   focusLocation,
+  livePos,
+  onStartLiveRide,
 }) {
   const defaultCenter = [40.7128, -74.006];
   const defaultZoom = 5;
@@ -211,35 +241,52 @@ export default function MapView({
   return (
     <div className="relative w-full h-full rounded-none sm:rounded-2xl overflow-hidden shadow-sm border-0 sm:border border-zinc-300 bg-white">
       {/* Floating Directions & Start Ride Navigation Bar (Top Left) */}
-      {googleMapsUrl && (
+      {(googleMapsUrl || onStartLiveRide) && (
         <div className="absolute top-3 left-3 z-20 print:hidden flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="bg-white/95 border border-zinc-300 backdrop-blur-md rounded-xl p-1 sm:p-1.5 shadow-md flex items-center gap-1">
-            {/* Start Ride on Google Maps */}
-            <a
-              href={googleMapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-zinc-900 hover:bg-zinc-800 text-white shadow-2xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
-              title="Open turn-by-turn driving GPS navigation in Google Maps"
-            >
-              <Navigation className="w-3.5 h-3.5 text-white shrink-0" />
-              <span className="hidden sm:inline">Google Maps</span>
-              <span className="sm:hidden">GMaps</span>
-              <ExternalLink className="w-3 h-3 text-zinc-400 shrink-0" />
-            </a>
+          <div className="bg-white/95 border border-zinc-300 backdrop-blur-md rounded-xl p-1 sm:p-1.5 shadow-md flex items-center gap-1.5">
+            {/* Start In-App Ride (Live Petrol Tracker) */}
+            {onStartLiveRide && (
+              <button
+                type="button"
+                onClick={onStartLiveRide}
+                className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md flex items-center gap-1.5 transition active:scale-95 cursor-pointer ring-1 ring-emerald-400/30"
+                title="Start in-app driving navigation with live petrol meter"
+              >
+                <Navigation className="w-3.5 h-3.5 text-white shrink-0 fill-white" />
+                <span>Start Ride</span>
+                <span className="hidden sm:inline-block px-1 py-0.2 rounded bg-emerald-700 text-[10px] uppercase font-mono">
+                  Live
+                </span>
+              </button>
+            )}
 
-            {/* Start Ride on Apple Maps */}
-            <a
-              href={appleMapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-300 shadow-2xs flex items-center gap-1 transition active:scale-95 cursor-pointer"
-              title="Open native turn-by-turn navigation in Apple Maps"
-            >
-              <Compass className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-              <span className="hidden sm:inline">Apple Maps</span>
-              <span className="sm:hidden">Apple</span>
-            </a>
+            {/* External Google Maps Option */}
+            {googleMapsUrl && (
+              <a
+                href={googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-800 shadow-2xs flex items-center gap-1 transition active:scale-95 cursor-pointer"
+                title="Open turn-by-turn driving GPS navigation in Google Maps app"
+              >
+                <span className="hidden sm:inline">GMaps</span>
+                <ExternalLink className="w-3 h-3 text-zinc-500 shrink-0" />
+              </a>
+            )}
+
+            {/* External Apple Maps Option */}
+            {appleMapsUrl && (
+              <a
+                href={appleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200 shadow-2xs flex items-center gap-1 transition active:scale-95 cursor-pointer hidden md:flex"
+                title="Open native turn-by-turn navigation in Apple Maps"
+              >
+                <span>Apple</span>
+                <ExternalLink className="w-3 h-3 text-zinc-400 shrink-0" />
+              </a>
+            )}
           </div>
         </div>
       )}
@@ -496,6 +543,18 @@ export default function MapView({
               </div>
             </Popup>
           </Marker>
+        )}
+
+        {/* Live GPS Navigation Pointer Marker */}
+        {livePos && livePos.lat != null && livePos.lon != null && (
+          <>
+            <Marker
+              position={[Number(livePos.lat), Number(livePos.lon)]}
+              icon={createCarIcon(livePos.heading || 0)}
+              zIndexOffset={1000}
+            />
+            <LiveMapFollower livePos={livePos} />
+          </>
         )}
 
         {/* Render High-Contrast Dual-Layer Route Polylines */}

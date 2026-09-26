@@ -8,6 +8,7 @@ import CostSummary from './components/CostSummary';
 import TripHistoryDrawer from './components/TripHistoryDrawer';
 import TurnByTurnModal from './components/TurnByTurnModal';
 import ExpenseReportModal from './components/ExpenseReportModal';
+import LiveRideNavigation from './components/LiveRideNavigation';
 import AuthModal from './components/AuthModal';
 import AdminPanelPage from './components/AdminPanelPage';
 import { Map, Sliders, ChevronDown, ChevronUp, ArrowDown, Receipt, Shield, Crown } from 'lucide-react';
@@ -74,6 +75,8 @@ export default function App() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isTurnByTurnOpen, setIsTurnByTurnOpen] = useState(false);
   const [isExpenseReportOpen, setIsExpenseReportOpen] = useState(false);
+  const [isLiveRideOpen, setIsLiveRideOpen] = useState(false);
+  const [liveGpsPos, setLiveGpsPos] = useState(null);
   const [isSavingTrip, setIsSavingTrip] = useState(false);
   const [isTripSaved, setIsTripSaved] = useState(false);
   const [focusLocation, setFocusLocation] = useState(null);
@@ -527,6 +530,10 @@ export default function App() {
               selectedRouteId={selectedRouteId}
               onSelectRoute={handleSelectRoute}
               onOpenSteps={() => setIsTurnByTurnOpen(true)}
+              onStartRide={() => {
+                setIsLiveRideOpen(true);
+                if (window.innerWidth < 1024) setMobileTab('map');
+              }}
             />
           )}
 
@@ -618,6 +625,11 @@ export default function App() {
             currency={currency}
             onOpenSteps={() => setIsTurnByTurnOpen(true)}
             focusLocation={focusLocation}
+            livePos={liveGpsPos}
+            onStartLiveRide={() => {
+              setIsLiveRideOpen(true);
+              if (window.innerWidth < 1024) setMobileTab('map');
+            }}
           />
         </section>
       </main>
@@ -638,6 +650,20 @@ export default function App() {
         route={activeRoute}
         origin={origin}
         destination={destination}
+      />
+
+      {/* Live Turn-by-Turn Driving Navigation & Live Petrol Usage HUD */}
+      <LiveRideNavigation
+        isOpen={isLiveRideOpen}
+        onClose={() => {
+          setIsLiveRideOpen(false);
+          setLiveGpsPos(null);
+        }}
+        route={activeRoute}
+        fuelAverage={fuelAverage}
+        fuelPrice={fuelPrice}
+        currency={currency}
+        onPositionUpdate={(pos) => setLiveGpsPos(pos)}
       />
 
       {/* Comprehensive Trip Expense & Fuel Cost Report Modal */}

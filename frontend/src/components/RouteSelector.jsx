@@ -1,11 +1,12 @@
 import React from 'react';
-import { Zap, Ruler, CheckCircle2, ListOrdered, ArrowRight } from 'lucide-react';
+import { Zap, Ruler, CheckCircle2, ListOrdered, ArrowRight, Navigation, Fuel } from 'lucide-react';
 
 export default function RouteSelector({
   routes,
   selectedRouteId,
   onSelectRoute,
   onOpenSteps,
+  onStartRide,
 }) {
   if (!routes || routes.length === 0) return null;
 
@@ -131,6 +132,33 @@ export default function RouteSelector({
             </strong>
           </div>
         </div>
+      )}
+
+      {/* Start In-App Ride & Live Petrol Tracker Action Button */}
+      {onStartRide && (
+        <button
+          type="button"
+          onClick={onStartRide}
+          className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.98] text-white font-bold shadow-lg shadow-emerald-950/20 flex items-center justify-between transition cursor-pointer border border-emerald-500/30 ring-2 ring-emerald-500/20"
+        >
+          <div className="flex items-center gap-3 text-left">
+            <div className="w-10 h-10 rounded-xl bg-emerald-700/80 flex items-center justify-center shrink-0 shadow-inner">
+              <Navigation className="w-5 h-5 text-white fill-white" />
+            </div>
+            <div>
+              <div className="text-sm font-bold flex items-center gap-1.5">
+                <span>Start In-App Ride</span>
+                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-800 text-emerald-100 font-semibold tracking-wide">
+                  Live Fuel Tracker
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-100 font-normal">
+                Turn-by-turn voice navigation + live petrol burned & cost ticker
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="w-5 h-5 text-emerald-100 shrink-0 ml-2" />
+        </button>
       )}
     </div>
   );
