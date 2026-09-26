@@ -142,19 +142,34 @@ export default function LocationInput({
     setDestQuery(tempQuery);
   };
 
-  // Silently detect country for currency/fuel without overriding the user's origin
+  // Fallback to IP geolocation — sets origin location so user always has a starting point
   const applyFallbackLocation = async () => {
     try {
       const ipData = await fetchIpLocation();
-      if (ipData && ipData.countryCode && onCountryDetected) {
-        onCountryDetected(ipData.countryCode);
+      if (ipData && ipData.lat && ipData.lon) {
+        setUserGpsLocation(ipData);
+        if (ipData.countryCode && onCountryDetected) {
+          onCountryDetected(ipData.countryCode);
+        }
+        if (!isManuallyClearedRef.current) {
+          const loc = {
+            name: ipData.city ? `${ipData.city}, ${ipData.country || 'Pakistan'}` : 'Current Location',
+            lat: ipData.lat,
+            lon: ipData.lon,
+            city: ipData.city,
+            countryCode: ipData.countryCode,
+            isCurrentLocation: true,
+          };
+          setOrigin(loc);
+          setOriginQuery(loc.name);
+        }
       }
     } catch (e) {
-      console.warn('IP country detection notice:', e);
+      console.warn('IP fallback notice:', e);
     }
   };
 
-  // Auto-detect and fetch current location seamlessly
+  // Auto-detect current location seamlessly
   const handleUseCurrentLocation = async (isAutoInit = false) => {
     if (!navigator.geolocation) {
       if (isAutoInit) applyFallbackLocation();
@@ -202,22 +217,22 @@ export default function LocationInput({
           }
         } catch (err) {
           console.warn('Reverse geocode notice:', err);
+          await applyFallbackLocation();
         } finally {
           setIsLocatingUser(false);
         }
       },
       async (err) => {
-        setIsLocatingUser(false);
         console.warn('Geolocation notice:', err.message);
-        applyFallbackLocation();
+        await applyFallbackLocation();
+        setIsLocatingUser(false);
       },
-      { timeout: 8000, enableHighAccuracy: false, maximumAge: 60000 }
+      { timeout: 8000, enableHighAccuracy: false, maximumAge: 300000 }
     );
   };
 
-  // Auto-fetch location on load if empty
+  // Auto-fetch location on load
   useEffect(() => {
-    applyFallbackLocation();
     if (!origin) {
       handleUseCurrentLocation(true);
     }
