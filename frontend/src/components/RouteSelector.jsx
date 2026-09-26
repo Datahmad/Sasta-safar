@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, Ruler, CheckCircle2, ListOrdered, ArrowRight, Navigation, Fuel } from 'lucide-react';
+import { Zap, Ruler, CheckCircle2, ListOrdered, ArrowRight, Navigation } from 'lucide-react';
 
 export default function RouteSelector({
   routes,
@@ -139,11 +139,11 @@ export default function RouteSelector({
         <button
           type="button"
           onClick={onStartRide}
-          className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.98] text-white font-bold shadow-lg shadow-emerald-950/20 flex items-center justify-between transition cursor-pointer border border-emerald-500/30 ring-2 ring-emerald-500/20"
+          className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.98] text-white font-bold shadow-md flex items-center justify-between transition cursor-pointer border border-emerald-500/40 ring-2 ring-emerald-500/20"
         >
           <div className="flex items-center gap-3 text-left">
-            <div className="w-10 h-10 rounded-xl bg-emerald-700/80 flex items-center justify-center shrink-0 shadow-inner">
-              <Navigation className="w-5 h-5 text-white fill-white" />
+            <div className="w-9 h-9 rounded-xl bg-emerald-700/80 flex items-center justify-center shrink-0 shadow-inner">
+              <Navigation className="w-5 h-5 text-white fill-white animate-pulse" />
             </div>
             <div>
               <div className="text-sm font-bold flex items-center gap-1.5">
@@ -153,7 +153,7 @@ export default function RouteSelector({
                 </span>
               </div>
               <p className="text-[11px] text-emerald-100 font-normal">
-                Turn-by-turn voice navigation + live petrol burned & cost ticker
+                Road-level zoom + live fuel burned & cost ticker
               </p>
             </div>
           </div>

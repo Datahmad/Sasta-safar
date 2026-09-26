@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -9,7 +9,30 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
-import { Navigation, ExternalLink, Compass, Zap, Ruler, Crosshair, ListOrdered } from 'lucide-react';
+import {
+  Navigation,
+  ExternalLink,
+  Compass,
+  Zap,
+  Ruler,
+  Crosshair,
+  ListOrdered,
+  Fuel,
+  Gauge,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  ArrowUp,
+  ArrowRight,
+  CornerUpRight,
+  CornerUpLeft,
+  RotateCw,
+  CheckCircle2,
+  X,
+  Flag,
+  RotateCcw,
+} from 'lucide-react';
 import { reverseGeocode } from '../services/api';
 
 // Create custom SVG Leaflet icons
@@ -37,31 +60,64 @@ const createCustomPin = (label, colorBg, colorRing) => {
 const originIcon = createCustomPin('A', '#059669', '#10b981');
 const destinationIcon = createCustomPin('B', '#e11d48', '#f43f5e');
 
-const createCarIcon = (heading = 0) => {
+// Create 3D Navigation Vehicle Pointer with Directional Heading & Radar Pulse
+const createVehiclePin = (heading = 0) => {
   return L.divIcon({
-    className: 'live-car-marker',
+    className: 'custom-vehicle-marker',
     html: `
-      <div style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; transform: rotate(${heading}deg); transition: transform 0.25s linear;">
-        <div style="position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(16, 185, 129, 0.35); animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-        <div style="width: 32px; height: 32px; border-radius: 50%; background: #059669; border: 3px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.35);">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <div style="position: relative; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;">
+        <div style="position: absolute; width: 48px; height: 48px; border-radius: 50%; background: rgba(37, 99, 235, 0.25); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+        <div style="position: relative; width: 34px; height: 34px; border-radius: 50%; background: #2563eb; border: 3px solid #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; transform: rotate(${heading}deg); transition: transform 0.3s ease;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="12 2 19 21 12 17 5 21 12 2" fill="#ffffff" />
           </svg>
         </div>
       </div>
     `,
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
   });
 };
 
-function LiveMapFollower({ livePos }) {
+// Camera Controller for Drive Mode: Zooms into street level (17.5) and auto-follows the vehicle
+function DriveModeCameraController({ isDriveMode, userPos, heading, recenterTrigger }) {
   const map = useMap();
+  const hasZoomedInRef = useRef(false);
+
   useEffect(() => {
-    if (livePos && livePos.lat != null && livePos.lon != null) {
-      map.panTo([Number(livePos.lat), Number(livePos.lon)], { animate: true, duration: 0.4 });
+    if (!isDriveMode) {
+      hasZoomedInRef.current = false;
+      return;
     }
-  }, [livePos, map]);
+
+    if (userPos && userPos[0] != null && userPos[1] != null && map) {
+      if (!hasZoomedInRef.current) {
+        // Initial zoom-in to street level (17.5) just like Google Maps
+        map.flyTo([userPos[0], userPos[1]], 17.5, {
+          animate: true,
+          duration: 1.2,
+        });
+        hasZoomedInRef.current = true;
+      } else {
+        // Smooth camera follow as the vehicle moves
+        map.panTo([userPos[0], userPos[1]], {
+          animate: true,
+          duration: 0.5,
+        });
+      }
+    }
+  }, [isDriveMode, userPos, map]);
+
+  // Handle explicit recenter button tap
+  useEffect(() => {
+    if (isDriveMode && userPos && userPos[0] != null && userPos[1] != null && map && recenterTrigger > 0) {
+      map.flyTo([userPos[0], userPos[1]], 17.5, {
+        animate: true,
+        duration: 0.8,
+      });
+    }
+  }, [recenterTrigger]);
+
   return null;
 }
 
@@ -73,6 +129,7 @@ function MapBoundsUpdater({
   mobileTab,
   reCenterTrigger,
   focusLocation,
+  isDriveMode,
 }) {
   const map = useMap();
 
@@ -92,6 +149,7 @@ function MapBoundsUpdater({
 
   // Handle direct manual location zoom (e.g. user clicked "View on Map" for Faisalabad or hostel)
   useEffect(() => {
+    if (isDriveMode) return;
     if (focusLocation && focusLocation.lat != null && focusLocation.lon != null && map) {
       map.invalidateSize({ animate: false });
       map.flyTo([Number(focusLocation.lat), Number(focusLocation.lon)], focusLocation.zoom || 15, {
@@ -99,10 +157,10 @@ function MapBoundsUpdater({
         duration: 1.2,
       });
     }
-  }, [focusLocation, map]);
+  }, [focusLocation, map, isDriveMode]);
 
   const fitView = () => {
-    if (!map) return;
+    if (!map || isDriveMode) return;
     map.invalidateSize({ animate: false });
 
     // If user just explicitly focused on a specific point, don't immediately overwrite with fitBounds
@@ -145,7 +203,7 @@ function MapBoundsUpdater({
       clearTimeout(t2);
       clearTimeout(t3);
     };
-  }, [origin, destination, selectedRoute?.id, mobileTab, reCenterTrigger, map]);
+  }, [origin, destination, selectedRoute?.id, mobileTab, reCenterTrigger, map, isDriveMode]);
 
   return null;
 }
@@ -188,16 +246,94 @@ export default function MapView({
   pinMode,
   setPinMode,
   mobileTab,
-  currency,
+  currency = 'Rs',
   onOpenSteps,
   focusLocation,
-  livePos,
-  onStartLiveRide,
+  fuelAverage = 14,
+  fuelPrice = 260,
+  setMobileTab,
+  onSaveTrip,
+  isDriveMode = false,
+  setIsDriveMode,
 }) {
-  const defaultCenter = [31.428, 73.125];
-  const defaultZoom = 7;
+  const defaultCenter = [40.7128, -74.006];
+  const defaultZoom = 5;
 
   const [reCenterTrigger, setReCenterTrigger] = React.useState(0);
+
+  // Live Driving & Petrol Tracking State
+  const [internalDriveMode, setInternalDriveMode] = useState(false);
+  const activeDriveMode = setIsDriveMode ? isDriveMode : internalDriveMode;
+  const setDriveMode = (val) => {
+    if (setIsDriveMode) setIsDriveMode(val);
+    else setInternalDriveMode(val);
+  };
+
+  const [isSimulation, setIsSimulation] = useState(false);
+  const [isVoiceMuted, setIsVoiceMuted] = useState(false);
+  const [vehiclePos, setVehiclePos] = useState(null);
+  const [vehicleHeading, setVehicleHeading] = useState(0);
+  const [speedKmH, setSpeedKmH] = useState(0);
+  const [distanceTraveledKm, setDistanceTraveledKm] = useState(0);
+  const [fuelConsumedLiters, setFuelConsumedLiters] = useState(0);
+  const [costSpent, setCostSpent] = useState(0);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [tripSummary, setTripSummary] = useState(null);
+  const [recenterDriveTrigger, setRecenterDriveTrigger] = useState(0);
+
+  // Distance & Bearing math
+  const calcHaversine = (lat1, lon1, lat2, lon2) => {
+    if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  const calcBearing = (lat1, lon1, lat2, lon2) => {
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const y = Math.sin(dLon) * Math.cos((lat2 * Math.PI) / 180);
+    const x =
+      Math.cos((lat1 * Math.PI) / 180) * Math.sin((lat2 * Math.PI) / 180) -
+      Math.sin((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.cos(dLon);
+    return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+  };
+
+  // Speech guidance
+  const lastSpokenRef = useRef('');
+  const speakInstruction = (text) => {
+    if (isVoiceMuted || !text || !('speechSynthesis' in window)) return;
+    if (lastSpokenRef.current === text) return;
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.0;
+      u.lang = 'en-US';
+      window.speechSynthesis.speak(u);
+      lastSpokenRef.current = text;
+    } catch {}
+  };
+
+  // Screen WakeLock to keep mobile screen awake while driving
+  const wakeLockRef = useRef(null);
+  const acquireWakeLock = async () => {
+    if ('wakeLock' in navigator) {
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+      } catch {}
+    }
+  };
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
+  };
 
   // Ultra-fast CDN tile providers (100% Free, zero keys)
   const mapStyles = {
@@ -227,7 +363,176 @@ export default function MapView({
   const fastestRoute = routes?.find((r) => r.isFastest) || routes?.[0];
   const shortestRoute = routes?.find((r) => r.isShortest) || (routes && routes.length > 1 ? routes[1] : null);
 
-  // External GPS navigation URLs for starting the ride
+  // Start Drive Mode
+  const startDriveMode = (sim = false) => {
+    if (!selectedRoute?.coordinates?.length) return;
+    if (setMobileTab) setMobileTab('map');
+    setDriveMode(true);
+    setIsSimulation(sim);
+    setDistanceTraveledKm(0);
+    setFuelConsumedLiters(0);
+    setCostSpent(0);
+    setSpeedKmH(sim ? 48 : 0);
+    setCurrentStepIndex(0);
+    lastSpokenRef.current = '';
+
+    const startCoord = selectedRoute.coordinates[0];
+    const secondCoord = selectedRoute.coordinates[1] || startCoord;
+    setVehiclePos(startCoord);
+    setVehicleHeading(calcBearing(startCoord[0], startCoord[1], secondCoord[0], secondCoord[1]));
+    acquireWakeLock();
+
+    speakInstruction(`Starting route to ${destination?.name?.split(',')[0] || 'destination'}. Have a safe journey!`);
+  };
+
+  // End Drive Mode
+  const endDriveMode = () => {
+    releaseWakeLock();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+    const finalDistance = Number(distanceTraveledKm.toFixed(2));
+    const finalFuel = Number(fuelConsumedLiters.toFixed(2));
+    const finalCost = Math.round(costSpent);
+
+    if (finalDistance > 0 || distanceTraveledKm > 0) {
+      setTripSummary({
+        distanceKm: finalDistance,
+        fuelBurnedLiters: finalFuel,
+        costSpent: finalCost,
+        currency: currency || 'Rs',
+        durationMinutes: Math.max(1, Math.round((finalDistance / (speedKmH > 10 ? speedKmH : 40)) * 60)),
+        from: origin?.name || 'Starting Point',
+        to: destination?.name || 'Destination',
+      });
+    }
+
+    setVehiclePos(null);
+    setDriveMode(false);
+  };
+
+  // Sync when parent changes isDriveMode (e.g. from RouteSelector or TurnByTurnModal)
+  useEffect(() => {
+    if (isDriveMode && !activeDriveMode && selectedRoute?.coordinates?.length) {
+      startDriveMode(false);
+    } else if (!isDriveMode && activeDriveMode) {
+      endDriveMode();
+    }
+  }, [isDriveMode, selectedRoute]);
+
+  // Simulation Loop
+  const simIndexRef = useRef(0);
+  useEffect(() => {
+    if (!activeDriveMode || !isSimulation || !selectedRoute?.coordinates?.length) return;
+
+    simIndexRef.current = 0;
+    let accumulatedDist = 0;
+
+    const interval = setInterval(() => {
+      const coords = selectedRoute.coordinates;
+      if (simIndexRef.current >= coords.length - 1) {
+        clearInterval(interval);
+        speakInstruction('You have arrived at your destination.');
+        endDriveMode();
+        return;
+      }
+
+      // Step forward by 2 points for smooth driving simulation
+      const prevCoord = coords[simIndexRef.current];
+      simIndexRef.current = Math.min(coords.length - 1, simIndexRef.current + 2);
+      const nextCoord = coords[simIndexRef.current];
+
+      const stepDist = calcHaversine(prevCoord[0], prevCoord[1], nextCoord[0], nextCoord[1]);
+      accumulatedDist += stepDist;
+
+      const fuel = accumulatedDist / (Number(fuelAverage) || 14);
+      const cost = fuel * (Number(fuelPrice) || 260);
+      const heading = calcBearing(prevCoord[0], prevCoord[1], nextCoord[0], nextCoord[1]);
+
+      setVehiclePos(nextCoord);
+      setVehicleHeading(heading);
+      setDistanceTraveledKm(accumulatedDist);
+      setFuelConsumedLiters(fuel);
+      setCostSpent(cost);
+      setSpeedKmH(Math.round(42 + Math.random() * 16));
+
+      // Calculate step progression
+      const fraction = simIndexRef.current / coords.length;
+      if (selectedRoute.steps?.length) {
+        const targetStepIdx = Math.min(
+          selectedRoute.steps.length - 1,
+          Math.floor(fraction * selectedRoute.steps.length)
+        );
+        setCurrentStepIndex(targetStepIdx);
+        const step = selectedRoute.steps[targetStepIdx];
+        if (step?.instruction) {
+          speakInstruction(step.instruction);
+        }
+      }
+    }, 700);
+
+    return () => clearInterval(interval);
+  }, [activeDriveMode, isSimulation, selectedRoute, fuelAverage, fuelPrice]);
+
+  // Real Hardware GPS Watch Loop (0 API tokens / 100% Native Phone GPS)
+  const prevGpsRef = useRef(null);
+  useEffect(() => {
+    if (!activeDriveMode || isSimulation) return;
+    if (!navigator.geolocation) return;
+
+    prevGpsRef.current = null;
+    let totalDist = 0;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, speed, heading } = pos.coords;
+        const currentCoord = [latitude, longitude];
+
+        if (prevGpsRef.current) {
+          const delta = calcHaversine(
+            prevGpsRef.current[0],
+            prevGpsRef.current[1],
+            latitude,
+            longitude
+          );
+          if (delta > 0.005) { // Prevent GPS jitter below 5 meters
+            totalDist += delta;
+            const fuel = totalDist / (Number(fuelAverage) || 14);
+            const cost = fuel * (Number(fuelPrice) || 260);
+
+            setDistanceTraveledKm(totalDist);
+            setFuelConsumedLiters(fuel);
+            setCostSpent(cost);
+          }
+        }
+
+        prevGpsRef.current = currentCoord;
+        setVehiclePos(currentCoord);
+        if (heading != null && !isNaN(heading)) setVehicleHeading(heading);
+        const liveSpeed = speed != null && !isNaN(speed) ? Math.round(speed * 3.6) : 0;
+        setSpeedKmH(liveSpeed);
+
+        // Check nearest upcoming step
+        if (selectedRoute?.steps?.length) {
+          const step = selectedRoute.steps[currentStepIndex];
+          if (step?.instruction) {
+            speakInstruction(step.instruction);
+          }
+        }
+      },
+      (err) => console.warn('[GPS Watch Warning]:', err.message),
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000,
+      }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [activeDriveMode, isSimulation, fuelAverage, fuelPrice, selectedRoute, currentStepIndex]);
+
+  // External GPS navigation URLs
   const googleMapsUrl =
     origin && destination && origin.lat != null && destination.lat != null
       ? `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lon}&destination=${destination.lat},${destination.lon}&travelmode=driving`
@@ -238,53 +543,194 @@ export default function MapView({
       ? `https://maps.apple.com/?saddr=${origin.lat},${origin.lon}&daddr=${destination.lat},${destination.lon}&dirflg=d`
       : null;
 
+  const remainingDistanceKm = Math.max(0, (selectedRoute?.distanceKm || 0) - distanceTraveledKm);
+  const remainingMinutes = Math.max(0, Math.round((remainingDistanceKm / (speedKmH > 15 ? speedKmH : 40)) * 60));
+  const currentStep = selectedRoute?.steps?.[currentStepIndex] || selectedRoute?.steps?.[0];
+
   return (
     <div className="relative w-full h-full rounded-none sm:rounded-2xl overflow-hidden shadow-sm border-0 sm:border border-zinc-300 bg-white">
-      {/* Floating Directions & Start Ride Navigation Bar (Top Left) */}
-      {(googleMapsUrl || onStartLiveRide) && (
-        <div className="absolute top-3 left-3 z-20 print:hidden flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="bg-white/95 border border-zinc-300 backdrop-blur-md rounded-xl p-1 sm:p-1.5 shadow-md flex items-center gap-1.5">
-            {/* Start In-App Ride (Live Petrol Tracker) */}
-            {onStartLiveRide && (
+      {/* DRIVE MODE: Top Turn-by-Turn Navigation HUD (Google Maps style) */}
+      {activeDriveMode && (
+        <div className="absolute top-3 left-3 right-3 sm:left-4 sm:right-auto sm:max-w-md z-30 animate-in fade-in slide-in-from-top-3 duration-300 print:hidden">
+          <div className="bg-emerald-700/95 border border-emerald-600 backdrop-blur-md rounded-2xl p-3.5 shadow-2xl text-white">
+            <div className="flex items-start justify-between gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0 border border-white/20">
+                {currentStep?.modifier?.includes('left') ? (
+                  <CornerUpLeft className="w-6 h-6 text-white" />
+                ) : currentStep?.modifier?.includes('right') ? (
+                  <CornerUpRight className="w-6 h-6 text-white" />
+                ) : currentStep?.type === 'roundabout' ? (
+                  <RotateCw className="w-6 h-6 text-white" />
+                ) : (
+                  <ArrowUp className="w-6 h-6 text-white" />
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-200">
+                    {isSimulation ? '🚗 Test Drive Mode' : '🛰️ Live Satellite Navigation'}
+                  </span>
+                  <span className="text-xs font-mono font-semibold px-1.5 py-0.5 rounded bg-black/25 text-emerald-100">
+                    {currentStep?.distanceKm ? `${Math.round(currentStep.distanceKm * 1000)} m` : 'Next turn'}
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-white leading-snug line-clamp-2 mt-0.5">
+                  {currentStep?.instruction || `Head towards ${destination?.name?.split(',')[0] || 'destination'}`}
+                </h3>
+              </div>
+
+              {/* Sound Audio Toggle */}
               <button
                 type="button"
-                onClick={onStartLiveRide}
-                className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md flex items-center gap-1.5 transition active:scale-95 cursor-pointer ring-1 ring-emerald-400/30"
-                title="Start in-app driving navigation with live petrol meter"
+                onClick={() => setIsVoiceMuted((m) => !m)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                title={isVoiceMuted ? 'Unmute voice navigation' : 'Mute voice navigation'}
               >
-                <Navigation className="w-3.5 h-3.5 text-white shrink-0 fill-white" />
-                <span>Start Ride</span>
-                <span className="hidden sm:inline-block px-1 py-0.2 rounded bg-emerald-700 text-[10px] uppercase font-mono">
-                  Live
-                </span>
+                {isVoiceMuted ? <VolumeX className="w-4 h-4 text-emerald-200" /> : <Volume2 className="w-4 h-4" />}
               </button>
-            )}
+            </div>
+          </div>
+        </div>
+      )}
 
-            {/* External Google Maps Option */}
+      {/* DRIVE MODE: Bottom Live Petrol Usage & Trip HUD */}
+      {activeDriveMode && (
+        <div className="absolute bottom-3 left-3 right-3 sm:left-4 sm:right-4 z-30 animate-in fade-in slide-in-from-bottom-3 duration-300 print:hidden">
+          <div className="bg-zinc-950/95 border border-zinc-800 backdrop-blur-md rounded-2xl p-3 sm:p-4 shadow-2xl text-white space-y-3">
+            {/* Live Metrics Grid: Speed, Fuel, Cost, ETA */}
+            <div className="grid grid-cols-4 gap-2 text-center">
+              {/* Speedometer */}
+              <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2 flex flex-col justify-center">
+                <div className="flex items-center justify-center gap-1 text-zinc-400 text-[10px] uppercase font-bold">
+                  <Gauge className="w-3 h-3 text-emerald-400" />
+                  <span>Speed</span>
+                </div>
+                <span className="text-lg sm:text-2xl font-black font-mono text-emerald-400 tracking-tight mt-0.5">
+                  {speedKmH}
+                </span>
+                <span className="text-[10px] text-zinc-500 font-mono">km/h</span>
+              </div>
+
+              {/* Live Fuel Burned */}
+              <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2 flex flex-col justify-center">
+                <div className="flex items-center justify-center gap-1 text-zinc-400 text-[10px] uppercase font-bold">
+                  <Fuel className="w-3 h-3 text-amber-400" />
+                  <span>Fuel</span>
+                </div>
+                <span className="text-lg sm:text-2xl font-black font-mono text-amber-400 tracking-tight mt-0.5">
+                  {fuelConsumedLiters.toFixed(2)}
+                </span>
+                <span className="text-[10px] text-zinc-500 font-mono">Liters</span>
+              </div>
+
+              {/* Live Cost Spent */}
+              <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2 flex flex-col justify-center">
+                <div className="flex items-center justify-center gap-1 text-zinc-400 text-[10px] uppercase font-bold">
+                  <span className="text-emerald-400 font-bold">{currency}</span>
+                  <span>Cost</span>
+                </div>
+                <span className="text-lg sm:text-2xl font-black font-mono text-white tracking-tight mt-0.5">
+                  {Math.round(costSpent)}
+                </span>
+                <span className="text-[10px] text-zinc-500 font-mono">spent</span>
+              </div>
+
+              {/* Remaining Distance & Time */}
+              <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2 flex flex-col justify-center">
+                <div className="flex items-center justify-center gap-1 text-zinc-400 text-[10px] uppercase font-bold">
+                  <Compass className="w-3 h-3 text-blue-400" />
+                  <span>Left</span>
+                </div>
+                <span className="text-base sm:text-xl font-black font-mono text-blue-300 tracking-tight mt-0.5">
+                  {remainingDistanceKm.toFixed(1)}k
+                </span>
+                <span className="text-[10px] text-zinc-500 font-mono">{remainingMinutes}m</span>
+              </div>
+            </div>
+
+            {/* Bottom Actions Bar */}
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <div className="flex items-center gap-1.5">
+                {/* Switch between Live GPS and Test Drive simulation */}
+                <button
+                  type="button"
+                  onClick={() => setIsSimulation((s) => !s)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition flex items-center gap-1 cursor-pointer ${
+                    isSimulation
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700'
+                  }`}
+                  title="Toggle Test Drive simulation"
+                >
+                  {isSimulation ? <Play className="w-3 h-3 fill-amber-300" /> : <Compass className="w-3 h-3" />}
+                  <span className="hidden sm:inline">{isSimulation ? 'Sim Active' : 'Test Drive'}</span>
+                </button>
+
+                {/* Recenter Camera on Vehicle */}
+                <button
+                  type="button"
+                  onClick={() => setRecenterDriveTrigger((c) => c + 1)}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition flex items-center gap-1 cursor-pointer"
+                  title="Recenter and zoom camera on vehicle"
+                >
+                  <Crosshair className="w-3 h-3" />
+                  <span className="hidden sm:inline">Recenter</span>
+                </button>
+              </div>
+
+              {/* End Ride Button */}
+              <button
+                type="button"
+                onClick={endDriveMode}
+                className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm shadow-md flex items-center gap-1.5 transition active:scale-95 cursor-pointer ml-auto"
+              >
+                <span>End Ride</span>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Directions & Start Ride Navigation Bar (Top Left) - Normal Mode */}
+      {!activeDriveMode && selectedRoute && (
+        <div className="absolute top-3 left-3 z-20 print:hidden flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="bg-white/95 border border-zinc-300 backdrop-blur-md rounded-xl p-1 sm:p-1.5 shadow-md flex items-center gap-1">
+            {/* Start In-App Ride (Live GPS & Live Petrol Usage) */}
+            <button
+              type="button"
+              onClick={() => startDriveMode(false)}
+              className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+              title="Start live GPS driving navigation with real-time petrol usage"
+            >
+              <Navigation className="w-3.5 h-3.5 fill-white text-white shrink-0 animate-pulse" />
+              <span>Start Ride</span>
+            </button>
+
+            {/* Test Drive (Simulation) */}
+            <button
+              type="button"
+              onClick={() => startDriveMode(true)}
+              className="px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-zinc-900 hover:bg-zinc-800 text-white shadow-2xs flex items-center gap-1 transition active:scale-95 cursor-pointer"
+              title="Test drive simulation along the route"
+            >
+              <Play className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />
+              <span className="hidden sm:inline">Test Drive</span>
+              <span className="sm:hidden">Sim</span>
+            </button>
+
+            {/* External Google Maps option */}
             {googleMapsUrl && (
               <a
                 href={googleMapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-800 shadow-2xs flex items-center gap-1 transition active:scale-95 cursor-pointer"
-                title="Open turn-by-turn driving GPS navigation in Google Maps app"
+                className="px-2 py-1.5 rounded-lg text-xs font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 flex items-center gap-1 transition"
+                title="Open turn-by-turn driving GPS navigation in Google Maps"
               >
-                <span className="hidden sm:inline">GMaps</span>
-                <ExternalLink className="w-3 h-3 text-zinc-500 shrink-0" />
-              </a>
-            )}
-
-            {/* External Apple Maps Option */}
-            {appleMapsUrl && (
-              <a
-                href={appleMapsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200 shadow-2xs flex items-center gap-1 transition active:scale-95 cursor-pointer hidden md:flex"
-                title="Open native turn-by-turn navigation in Apple Maps"
-              >
-                <span>Apple</span>
-                <ExternalLink className="w-3 h-3 text-zinc-400 shrink-0" />
+                <span>GMaps</span>
+                <ExternalLink className="w-3 h-3 text-zinc-400" />
               </a>
             )}
           </div>
@@ -509,7 +955,25 @@ export default function MapView({
           mobileTab={mobileTab}
           reCenterTrigger={reCenterTrigger}
           focusLocation={focusLocation}
+          isDriveMode={activeDriveMode}
         />
+
+        {/* Drive Mode Camera Controller: Street-level zoom (17.5) and auto-follow */}
+        <DriveModeCameraController
+          isDriveMode={activeDriveMode}
+          userPos={vehiclePos}
+          heading={vehicleHeading}
+          recenterTrigger={recenterDriveTrigger}
+        />
+
+        {/* Live Drive Mode Vehicle Pointer Marker */}
+        {activeDriveMode && vehiclePos && (
+          <Marker
+            position={vehiclePos}
+            icon={createVehiclePin(vehicleHeading)}
+            zIndexOffset={1000}
+          />
+        )}
 
         {/* Map Click Interaction Handler */}
         <MapClickHandler
@@ -543,18 +1007,6 @@ export default function MapView({
               </div>
             </Popup>
           </Marker>
-        )}
-
-        {/* Live GPS Navigation Pointer Marker */}
-        {livePos && livePos.lat != null && livePos.lon != null && (
-          <>
-            <Marker
-              position={[Number(livePos.lat), Number(livePos.lon)]}
-              icon={createCarIcon(livePos.heading || 0)}
-              zIndexOffset={1000}
-            />
-            <LiveMapFollower livePos={livePos} />
-          </>
         )}
 
         {/* Render High-Contrast Dual-Layer Route Polylines */}
@@ -646,6 +1098,66 @@ export default function MapView({
               );
             })}
       </MapContainer>
+
+      {/* Trip Completed Receipt Modal */}
+      {tripSummary && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden border border-zinc-200 animate-in zoom-in-95 duration-150">
+            <div className="p-5 text-center bg-gradient-to-b from-emerald-50 via-emerald-50/50 to-white border-b border-zinc-100">
+              <div className="w-14 h-14 rounded-full bg-emerald-100 border-2 border-emerald-300 flex items-center justify-center mx-auto mb-3 shadow-inner">
+                <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+              </div>
+              <h3 className="text-xl font-black text-zinc-900 tracking-tight">Trip Completed!</h3>
+              <p className="text-xs text-zinc-500 mt-1 line-clamp-1">
+                {tripSummary.from?.split(',')[0]} &rarr; {tripSummary.to?.split(',')[0]}
+              </p>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-2.5">
+                  <span className="text-[10px] text-zinc-500 uppercase font-bold block">Distance</span>
+                  <span className="text-base font-black font-mono text-zinc-900">{tripSummary.distanceKm}</span>
+                  <span className="text-[10px] text-zinc-400 font-mono block">km</span>
+                </div>
+                <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-2.5">
+                  <span className="text-[10px] text-amber-700 uppercase font-bold block">Fuel Burned</span>
+                  <span className="text-base font-black font-mono text-amber-700">{tripSummary.fuelBurnedLiters}</span>
+                  <span className="text-[10px] text-amber-600 font-mono block">Liters</span>
+                </div>
+                <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-2.5">
+                  <span className="text-[10px] text-emerald-700 uppercase font-bold block">Fuel Cost</span>
+                  <span className="text-base font-black font-mono text-emerald-700">{tripSummary.currency} {tripSummary.costSpent}</span>
+                  <span className="text-[10px] text-emerald-600 font-mono block">total</span>
+                </div>
+              </div>
+
+              <div className="pt-1 flex flex-col gap-2">
+                {onSaveTrip && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSaveTrip();
+                      setTripSummary(null);
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Save Trip to History</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setTripSummary(null)}
+                  className="w-full py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-xs sm:text-sm transition cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

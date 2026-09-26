@@ -10,7 +10,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
-export default function TurnByTurnModal({ isOpen, onClose, route, origin, destination }) {
+export default function TurnByTurnModal({ isOpen, onClose, route, origin, destination, onStartRide }) {
   if (!isOpen || !route) return null;
 
   const steps = route.steps || [];
@@ -93,19 +93,29 @@ export default function TurnByTurnModal({ isOpen, onClose, route, origin, destin
 
         {/* Footer */}
         <div className="p-3.5 border-t border-zinc-200 bg-zinc-50/50 flex flex-wrap items-center justify-between gap-2">
-          {googleMapsUrl ? (
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {onStartRide && (
+              <button
+                type="button"
+                onClick={onStartRide}
+                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-xs"
+              >
+                <Navigation className="w-3.5 h-3.5 fill-white text-white animate-pulse" />
+                <span>Start In-App Ride</span>
+              </button>
+            )}
+            {googleMapsUrl && (
               <a
                 href={googleMapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-xs"
               >
-                <Navigation className="w-3.5 h-3.5 text-zinc-300" />
-                <span>Start Ride</span>
-                <span className="hidden sm:inline text-[11px] text-zinc-400">(Google Maps)</span>
+                <span>Google Maps</span>
                 <ExternalLink className="w-3 h-3 text-zinc-400" />
               </a>
+            )}
+            {appleMapsUrl && (
               <a
                 href={appleMapsUrl}
                 target="_blank"
@@ -115,8 +125,8 @@ export default function TurnByTurnModal({ isOpen, onClose, route, origin, destin
                 <span>Apple Maps</span>
                 <ExternalLink className="w-3 h-3 text-zinc-400" />
               </a>
-            </div>
-          ) : <div />}
+            )}
+          </div>
           <button
             onClick={onClose}
             className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-200 text-xs font-medium transition cursor-pointer shadow-xs ml-auto"
