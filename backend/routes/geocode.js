@@ -156,6 +156,62 @@ function formatPhotonItem(feature, userCountry, userLat, userLon, userCity) {
   };
 }
 
+const MAPBOX_DEFAULT_TOKEN =
+  process.env.MAPBOX_TOKEN ||
+  'pk.eyJ1IjoiYWhtZWRvZ3JhcGh5eXkiLCJhIjoiY211Z2tibWlnMDE5dTJ3c2ZxYWN5d2Q4ZSJ9.bql_v51zZMwGcdLZaTngRw';
+
+// Helper to format Mapbox features into standard place item
+function formatMapboxItem(feature, userCountry, userLat, userLon, userCity) {
+  const [lon, lat] = feature.center || [0, 0];
+  const context = feature.context || [];
+  const cityObj = context.find((c) => c.id.startsWith('place') || c.id.startsWith('district'));
+  const countryObj = context.find((c) => c.id.startsWith('country'));
+
+  const itemCity = cityObj ? cityObj.text : null;
+  const itemCountry = (countryObj?.short_code || 'pk').toLowerCase();
+  const distKm = getDistanceKm(userLat, userLon, lat, lon);
+
+  const isCityNameMatch =
+    Boolean(userCity && itemCity && itemCity.toLowerCase() === userCity.toLowerCase());
+  const isCloseProximity = distKm != null && distKm <= 40;
+  const isInCity = isCityNameMatch || isCloseProximity;
+  const isInCountry = itemCountry === 'pk' || itemCountry === userCountry;
+
+  let tier = 2;
+  let tierLabel = 'In-Country';
+  if (isInCity) {
+    tier = 1;
+    tierLabel = 'In-City';
+  } else if (!isInCountry) {
+    tier = 3;
+    tierLabel = 'International';
+  }
+
+  return {
+    id: `mb_${feature.id}`,
+    displayName: feature.place_name || feature.text,
+    lat: parseFloat(lat),
+    lon: parseFloat(lon),
+    type: feature.place_type?.[0] || 'place',
+    class: 'mapbox',
+    importance: 0.9,
+    address: {
+      road: feature.text,
+      city: itemCity,
+      country: 'Pakistan',
+      country_code: 'pk',
+    },
+    city: itemCity,
+    countryCode: 'pk',
+    country: 'Pakistan',
+    distanceKm: distKm,
+    tier,
+    tierLabel,
+    isInCity,
+    isLocalCountry: true,
+  };
+}
+
 // Search locations by query string with smart 3-tier prioritization:
 // Tier 1: In-City -> Tier 2: In-Country (other cities) -> Tier 3: International
 router.get('/search', async (req, res) => {
@@ -195,19 +251,33 @@ router.get('/search', async (req, res) => {
       viewboxParam = `${(userLon - deltaLon).toFixed(4)},${(userLat + deltaLat).toFixed(4)},${(userLon + deltaLon).toFixed(4)},${(userLat - deltaLat).toFixed(4)}`;
     }
 
-    // Query Nominatim & Photon in parallel
+    // 1. Mapbox Geocoding Query (Strictly within Pakistan)
+    const mapboxPromise = (async () => {
+      try {
+        const mbUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+          query
+        )}.json?access_token=${MAPBOX_DEFAULT_TOKEN}&country=pk&autocomplete=true&limit=6`;
+        const response = await axios.get(mbUrl, { timeout: 4000 });
+        return response.data?.features || [];
+      } catch (err) {
+        console.warn('[Mapbox Search Warning]:', err.message);
+        return [];
+      }
+    })();
+
+    // 2. Nominatim Query (Strictly within userCountry/pk)
     const nominatimPromise = (async () => {
       try {
         const params = {
           q: query,
           format: 'json',
           addressdetails: 1,
-          limit: 12,
+          limit: 10,
+          countrycodes: userCountry || 'pk',
         };
-        if (userCountry) params.countrycodes = userCountry;
         if (viewboxParam) {
           params.viewbox = viewboxParam;
-          params.bounded = 0; // bias without strict boundary cutoff
+          params.bounded = 0;
         }
         const response = await axios.get('https://nominatim.openstreetmap.org/search', {
           params,
@@ -221,32 +291,53 @@ router.get('/search', async (req, res) => {
       }
     })();
 
+    // 3. Photon Query
     const photonPromise = (async () => {
       try {
-        const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=12${
+        const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=10${
           viewboxParam && userLat != null && userLon != null ? `&lat=${userLat}&lon=${userLon}` : ''
         }`;
         const response = await axios.get(photonUrl, {
           headers: { 'User-Agent': USER_AGENT },
           timeout: 4500,
         });
-        return response.data?.features || [];
+        // Filter features strictly for Pakistan
+        return (response.data?.features || []).filter(
+          (f) => (f.properties?.countrycode || 'pk').toLowerCase() === 'pk'
+        );
       } catch (err) {
         console.warn('[Photon Search Warning]:', err.message);
         return [];
       }
     })();
 
-    const [nominatimResults, photonFeatures] = await Promise.all([nominatimPromise, photonPromise]);
+    const [mapboxFeatures, nominatimResults, photonFeatures] = await Promise.all([
+      mapboxPromise,
+      nominatimPromise,
+      photonPromise,
+    ]);
 
+    // Process Mapbox results first (Highest commercial accuracy)
+    mapboxFeatures.forEach((feat) => {
+      const [lon, lat] = feat.center || [NaN, NaN];
+      if (!isNaN(lat) && !isNaN(lon) && !isDuplicate(lat, lon)) {
+        combinedResults.push(formatMapboxItem(feat, userCountry, userLat, userLon, userCity));
+      }
+    });
+
+    // Process Nominatim results
     nominatimResults.forEach((item) => {
       const lat = parseFloat(item.lat);
       const lon = parseFloat(item.lon);
       if (!isNaN(lat) && !isNaN(lon) && !isDuplicate(lat, lon)) {
+        // Enforce Pakistan only if userCountry is pk
+        const countryCode = (item.address?.country_code || '').toLowerCase();
+        if (userCountry === 'pk' && countryCode && countryCode !== 'pk') return;
         combinedResults.push(formatPlaceItem(item, userCountry, userLat, userLon, userCity));
       }
     });
 
+    // Process Photon results
     photonFeatures.forEach((feat) => {
       const [lon, lat] = feat.geometry?.coordinates || [NaN, NaN];
       if (!isNaN(lat) && !isNaN(lon) && !isDuplicate(lat, lon)) {
@@ -254,15 +345,20 @@ router.get('/search', async (req, res) => {
       }
     });
 
-    // Fallback if empty
-    if (combinedResults.length === 0) {
+    // Smart Fallback for compound queries like "sitara park city jaranwala road"
+    // If fewer than 2 results found, extract and query the key parts (e.g. road or colony name)
+    if (combinedResults.length < 2 && query.split(/\s+/).length >= 3) {
       try {
-        const globalRes = await axios.get('https://nominatim.openstreetmap.org/search', {
-          params: { q: query, format: 'json', addressdetails: 1, limit: 8 },
+        const roadMatch = query.match(/(?:(?:jaranwala|canal|mall|gt|jail|circular|peoples|satiana|samundri|millat)\s+(?:road|rd|rd\.|sarak))/i);
+        const subQuery = roadMatch ? `${roadMatch[0]}, Faisalabad` : query.split(/\s+/).slice(-2).join(' ');
+        
+        const fallbackRes = await axios.get('https://nominatim.openstreetmap.org/search', {
+          params: { q: subQuery, format: 'json', addressdetails: 1, limit: 6, countrycodes: 'pk' },
           headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'en' },
-          timeout: 5000,
+          timeout: 4000,
         });
-        (globalRes.data || []).forEach((item) => {
+
+        (fallbackRes.data || []).forEach((item) => {
           const lat = parseFloat(item.lat);
           const lon = parseFloat(item.lon);
           if (!isNaN(lat) && !isNaN(lon) && !isDuplicate(lat, lon)) {

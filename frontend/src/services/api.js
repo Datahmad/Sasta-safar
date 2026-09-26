@@ -59,19 +59,36 @@ export async function searchPlaces(query, context = {}) {
       directParams.append('bounded', '0');
     }
 
-    // Run Nominatim and Photon in parallel for maximum recall
+    // Query Mapbox Geocoding with strict Pakistan filter
+    const MAPBOX_TOKEN =
+      import.meta.env.VITE_MAPBOX_TOKEN ||
+      'pk.eyJ1IjoiYWhtZWRvZ3JhcGh5eXkiLCJhIjoiY211Z2tibWlnMDE5dTJ3c2ZxYWN5d2Q4ZSJ9.bql_v51zZMwGcdLZaTngRw';
+
+    const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+      query
+    )}.json?access_token=${MAPBOX_TOKEN}&country=pk&autocomplete=true&limit=6`;
+
+    const mapboxFetch = fetch(mapboxUrl)
+      .then((r) => (r.ok ? r.json() : { features: [] }))
+      .catch(() => ({ features: [] }));
+
+    // Run Mapbox, Nominatim and Photon in parallel for maximum recall
     const nominatimFetch = fetch(`https://nominatim.openstreetmap.org/search?${directParams.toString()}`)
       .then((r) => (r.ok ? r.json() : []))
       .catch(() => []);
 
-    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=12${
+    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=10${
       !hasExplicitCityOrComma && lat != null && lon != null ? `&lat=${lat}&lon=${lon}` : ''
     }`;
     const photonFetch = fetch(photonUrl)
       .then((r) => (r.ok ? r.json() : { features: [] }))
       .catch(() => ({ features: [] }));
 
-    const [nominatimList, photonData] = await Promise.all([nominatimFetch, photonFetch]);
+    const [mapboxData, nominatimList, photonData] = await Promise.all([
+      mapboxFetch,
+      nominatimFetch,
+      photonFetch,
+    ]);
     const results = [];
     const seenCoordinates = new Set();
 
@@ -81,6 +98,51 @@ export async function searchPlaces(query, context = {}) {
       seenCoordinates.add(key);
       return false;
     };
+
+    // Format Mapbox features first
+    (mapboxData?.features || []).forEach((feat) => {
+      const [featLon, featLat] = feat.center || [NaN, NaN];
+      if (isNaN(featLat) || isNaN(featLon) || isDuplicate(featLat, featLon)) return;
+
+      const context = feat.context || [];
+      const cityObj = context.find((c) => c.id.startsWith('place') || c.id.startsWith('district'));
+      const itemCity = cityObj ? cityObj.text : null;
+
+      let distKm = null;
+      if (lat != null && lon != null && !isNaN(lat) && !isNaN(lon)) {
+        const R = 6371;
+        const dLat = ((featLat - lat) * Math.PI) / 180;
+        const dLon = ((featLon - lon) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos((lat * Math.PI) / 180) *
+            Math.cos((featLat * Math.PI) / 180) *
+            Math.sin(dLon / 2) ** 2;
+        distKm = parseFloat((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1));
+      }
+
+      const isCityMatch = city && itemCity && itemCity.toLowerCase() === city.toLowerCase();
+      const isClose = distKm != null && distKm <= 40;
+      const isInCity = Boolean(isCityMatch || isClose);
+
+      results.push({
+        id: `mb_${feat.id}`,
+        displayName: feat.place_name || feat.text,
+        lat: featLat,
+        lon: featLon,
+        type: feat.place_type?.[0] || 'place',
+        class: 'mapbox',
+        city: itemCity,
+        countryCode: 'pk',
+        country: 'Pakistan',
+        distanceKm: distKm,
+        tier: isInCity ? 1 : 2,
+        tierLabel: isInCity ? 'In-City' : 'In-Country',
+        isInCity,
+        isLocalCountry: true,
+        importance: 0.9,
+      });
+    });
 
     // Format Nominatim
     (nominatimList || []).forEach((item) => {
