@@ -142,8 +142,8 @@ export default function LocationInput({
     setDestQuery(tempQuery);
   };
 
-  // Fallback to IP geolocation
-  const applyFallbackLocation = async () => {
+  // Fetch location from IP — always works, instant result
+  const fetchAndApplyIpLocation = async () => {
     try {
       const ipData = await fetchIpLocation();
       if (ipData && ipData.lat && ipData.lon) {
@@ -153,7 +153,7 @@ export default function LocationInput({
         }
         if (!isManuallyClearedRef.current) {
           const loc = {
-            name: ipData.city ? `${ipData.city}, ${ipData.countryName || 'Current Location'}` : 'Current Location',
+            name: ipData.city ? `${ipData.city}, ${ipData.country || 'Pakistan'}` : 'Current Location',
             lat: ipData.lat,
             lon: ipData.lon,
             city: ipData.city,
@@ -162,127 +162,98 @@ export default function LocationInput({
           };
           setOrigin(loc);
           setOriginQuery(loc.name);
+          if (onViewOnMap) onViewOnMap(loc);
         }
+        return true;
       }
     } catch (e) {
-      console.warn('IP fallback failed:', e);
+      console.warn('IP location notice:', e);
     }
+    return false;
   };
 
-  // Handle successful geolocation coordinate fix
-  const handlePositionSuccess = (pos) => {
-    const { latitude, longitude, accuracy } = pos.coords;
-    console.log(`[GPS Fix Acquired]: ${latitude}, ${longitude} (accuracy: ${accuracy}m)`);
+  // Try browser geolocation to upgrade/replace IP location with precise Wi-Fi coords
+  const tryBrowserGeolocation = () => {
+    if (!navigator.geolocation) return;
 
-    // Set origin immediately so user does NOT wait on reverseGeocode network latency
-    const initialLoc = {
-      name: `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
-      lat: latitude,
-      lon: longitude,
-      city: null,
-      countryCode: 'pk',
-      isCurrentLocation: true,
-      accuracy,
-    };
-
-    setUserGpsLocation(initialLoc);
-
-    if (!isManuallyClearedRef.current) {
-      setOrigin(initialLoc);
-      setOriginQuery(initialLoc.name);
-      if (onViewOnMap) onViewOnMap(initialLoc);
-    }
-
-    setIsLocatingUser(false);
-
-    // Resolve clean street / colony / city name in the background
-    reverseGeocode(latitude, longitude)
-      .then((rev) => {
-        if (rev && !isManuallyClearedRef.current) {
-          const cityName = rev?.city || rev?.address?.city || rev?.address?.town || null;
-          const countryCode = rev?.countryCode || rev?.address?.country_code || 'pk';
-          const resolvedName = rev?.displayName || initialLoc.name;
-
-          const updatedLoc = {
-            ...initialLoc,
-            name: resolvedName,
-            city: cityName,
-            countryCode,
-          };
-
-          setUserGpsLocation(updatedLoc);
-          setOrigin(updatedLoc);
-          setOriginQuery(resolvedName);
-
-          if (countryCode && onCountryDetected) {
-            onCountryDetected(countryCode);
-          }
-        }
-      })
-      .catch((err) => console.warn('Reverse geocode background notice:', err));
-  };
-
-  // Use Multi-Tier Location Detection: High-Accuracy GPS -> Standard Wi-Fi -> IP Fallback
-  const handleUseCurrentLocation = async (isAutoInit = false) => {
-    if (!navigator.geolocation) {
-      if (!isAutoInit) await applyFallbackLocation();
-      setIsLocatingUser(false);
-      return;
-    }
-
-    // On initial page load: only fetch if the user has ALREADY granted permission previously
-    if (isAutoInit) {
-      if (navigator.permissions && navigator.permissions.query) {
-        try {
-          const perm = await navigator.permissions.query({ name: 'geolocation' });
-          if (perm.state !== 'granted') {
-            return;
-          }
-        } catch {
-          return;
-        }
-      } else {
-        return;
-      }
-    }
-
-    setIsLocatingUser(true);
-    isManuallyClearedRef.current = false;
-
-    // Tier 1: Try High Accuracy GPS first (ideal on phones with satellite GPS)
     navigator.geolocation.getCurrentPosition(
-      (pos) => handlePositionSuccess(pos),
-      (highAccErr) => {
-        console.warn('[GPS High Accuracy Notice]:', highAccErr.message, 'Trying standard Wi-Fi geolocation...');
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
 
-        // Tier 2: Standard Browser Accuracy (ideal for MacBooks, PCs, Wi-Fi laptops)
-        navigator.geolocation.getCurrentPosition(
-          (pos) => handlePositionSuccess(pos),
-          async (stdErr) => {
-            console.warn('[GPS Standard Accuracy Notice]:', stdErr.message, 'Falling back to IP geolocation...');
+        // Always set the precise coords immediately — don't wait for reverse geocode
+        const fallbackLoc = {
+          name: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+          lat: latitude,
+          lon: longitude,
+          city: null,
+          countryCode: 'pk',
+          isCurrentLocation: true,
+        };
 
-            // Tier 3: Network IP-based location fallback
-            await applyFallbackLocation();
-            setIsLocatingUser(false);
-          },
-          {
-            timeout: 8000,
-            enableHighAccuracy: false,
-            maximumAge: 60000,
+        // Set origin right away with raw coords
+        setUserGpsLocation({ lat: latitude, lon: longitude, city: null, countryCode: 'pk' });
+        if (!isManuallyClearedRef.current) {
+          setOrigin(fallbackLoc);
+          setOriginQuery(fallbackLoc.name);
+          if (onViewOnMap) onViewOnMap(fallbackLoc);
+        }
+        if (onCountryDetected) onCountryDetected('pk');
+
+        // Now try to get a nice address name in the background
+        try {
+          const rev = await reverseGeocode(latitude, longitude);
+          if (rev && !isManuallyClearedRef.current) {
+            const cityName = rev.city || null;
+            const countryCode = rev.countryCode || 'pk';
+            const loc = {
+              name: rev.displayName || fallbackLoc.name,
+              lat: latitude,
+              lon: longitude,
+              city: cityName,
+              countryCode,
+              isCurrentLocation: true,
+            };
+            setUserGpsLocation({ lat: latitude, lon: longitude, city: cityName, countryCode });
+            setOrigin(loc);
+            setOriginQuery(loc.name);
+            if (countryCode && onCountryDetected) onCountryDetected(countryCode);
           }
-        );
+        } catch (err) {
+          console.warn('Reverse geocode notice:', err);
+          // Raw coords already set above — no problem
+        } finally {
+          setIsLocatingUser(false);
+        }
       },
-      {
-        timeout: 7000,
-        enableHighAccuracy: true,
-        maximumAge: 15000,
-      }
+      (err) => {
+        // Browser geolocation failed — IP result already applied, just stop spinner
+        console.warn('Browser geolocation notice:', err.message);
+        setIsLocatingUser(false);
+      },
+      { timeout: 10000, enableHighAccuracy: true, maximumAge: 0 }
     );
   };
 
-  // Check on initial load only if location was previously granted
+  // Main auto-detect handler — IP first (instant), then browser upgrade
+  const handleUseCurrentLocation = async () => {
+    setIsLocatingUser(true);
+    isManuallyClearedRef.current = false;
+
+    // Step 1: Immediately get IP location (fills in within ~1 second)
+    await fetchAndApplyIpLocation();
+
+    // Step 2: Try browser geolocation in background to upgrade to precise coords
+    tryBrowserGeolocation();
+
+    // Safety timeout — if browser geolocation hangs, stop spinner after 6s
+    setTimeout(() => setIsLocatingUser(false), 6000);
+  };
+
+  // Auto-fetch location on load
   useEffect(() => {
-    handleUseCurrentLocation(true);
+    if (!origin) {
+      handleUseCurrentLocation();
+    }
   }, []);
 
   const isReady = origin && destination && origin.lat && destination.lat;
@@ -337,10 +308,7 @@ export default function LocationInput({
             </span>
             <button
               type="button"
-              onClick={() => {
-                isManuallyClearedRef.current = false;
-                handleUseCurrentLocation(false);
-              }}
+              onClick={() => handleUseCurrentLocation()}
               disabled={isLocatingUser}
               className="text-xs text-zinc-600 hover:text-zinc-950 flex items-center gap-1 font-semibold transition cursor-pointer"
             >
@@ -352,7 +320,7 @@ export default function LocationInput({
               ) : (
                 <>
                   <Navigation className="w-3 h-3 text-zinc-500" />
-                  <span>Use GPS</span>
+                  <span>Auto-Detect</span>
                 </>
               )}
             </button>
@@ -370,7 +338,7 @@ export default function LocationInput({
               type="text"
               value={originQuery}
               onChange={(e) => handleOriginChange(e.target.value)}
-              placeholder={isLocatingUser ? "Detecting GPS location..." : "e.g. My Hostel, G-11 Islamabad, or tap Map..."}
+              placeholder={isLocatingUser ? "Auto-detecting your location..." : "e.g. My Hostel, G-11 Islamabad, or tap Map..."}
               className="w-full bg-white hover:bg-zinc-50/50 focus:bg-white text-sm font-medium text-zinc-900 placeholder-zinc-400 pl-9 pr-8 py-2.5 rounded-lg border border-zinc-300 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 outline-none transition shadow-2xs"
             />
             {originQuery && (
