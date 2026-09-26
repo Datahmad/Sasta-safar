@@ -1,27 +1,5 @@
 [
   {
-    "id": "usr_1790367458711_vujiv",
-    "name": "ahmed",
-    "email": "ahmedographyy@gmail.com",
-    "phone": "",
-    "password": "b8268c8a546c5ea69fd9c22bb2940169:ac30d3822150d1dc4c37ced590307bf35e8e56b193bbe56bf1ca4752de1525abd05e84371d95a73401856157850236b32dfa6ac7a7bbca55dc46d2e454d27cec",
-    "isVerified": true,
-    "defaultCurrency": "Rs",
-    "defaultFuelAverage": 14,
-    "createdAt": "2026-09-25T20:17:38.711Z"
-  },
-  {
-    "id": "usr_1790366049304_egqy9",
-    "name": "ahmed",
-    "email": "alto1098765@gmail.com",
-    "phone": "",
-    "password": "c01605a1c3030020a509581fec37429b:eaa2601e82c2d6244d01bb34a008b8cabbda7dafdf40cb218597856cd49f783882534c0bd92e3970a66f8dcff9c46b3ea18985b1061df3906d25280a27358c8c",
-    "isVerified": true,
-    "defaultCurrency": "Rs",
-    "defaultFuelAverage": 14,
-    "createdAt": "2026-09-25T19:54:09.304Z"
-  },
-  {
     "id": "usr_test_1790432376554",
     "name": "Test User",
     "email": "test@gmail.com",

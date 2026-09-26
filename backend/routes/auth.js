@@ -407,7 +407,7 @@ router.get('/me', authMiddleware, async (req, res) => {
  */
 router.get('/users', async (req, res) => {
   try {
-    const rawUsers = userStore.getAllUsers();
+    const rawUsers = await userStore.getAllUsersAsync();
     const cleanUsers = rawUsers.map((u) => ({
       id: u.id,
       name: u.name,
@@ -423,6 +423,121 @@ router.get('/users', async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Could not fetch users' });
+  }
+});
+
+// In-memory store for pending password reset OTPs (email -> { otp, otpExpires })
+const pendingPasswordResets = new Map();
+
+/**
+ * POST /api/auth/forgot-password
+ * Sends a 6-digit OTP code to reset password
+ */
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !email.trim()) {
+      return res.status(400).json({ success: false, message: 'Please provide your registered email address.' });
+    }
+
+    const normEmail = email.toLowerCase().trim();
+    const user = await userStore.findUserByEmail(normEmail);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No registered account found with this email address.',
+      });
+    }
+
+    const otp = generateOtp();
+    const otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    pendingPasswordResets.set(normEmail, {
+      otp,
+      otpExpires,
+      userId: user._id || user.id,
+      name: user.name,
+    });
+
+    const emailResult = await sendEmailOtp({
+      email: normEmail,
+      otp,
+      name: user.name || 'Traveler',
+    });
+
+    return res.json({
+      success: true,
+      message: `A 6-digit password reset code has been sent to ${normEmail}.`,
+      email: normEmail,
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    return res.status(500).json({ success: false, message: 'Could not send reset code. Please try again.' });
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Verifies OTP and updates user's password
+ */
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide your email, 6-digit OTP code, and new password.',
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long.',
+      });
+    }
+
+    const normEmail = email.toLowerCase().trim();
+    const cleanOtp = otp.toString().trim();
+
+    const pending = pendingPasswordResets.get(normEmail);
+    if (!pending) {
+      return res.status(400).json({
+        success: false,
+        message: 'No password reset request found for this email, or it has expired. Please request a new code.',
+      });
+    }
+
+    if (Date.now() > pending.otpExpires) {
+      pendingPasswordResets.delete(normEmail);
+      return res.status(400).json({
+        success: false,
+        message: 'The reset code has expired. Please request a new code.',
+      });
+    }
+
+    if (pending.otp !== cleanOtp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Incorrect verification code. Please check your email inbox and enter the 6-digit code.',
+      });
+    }
+
+    // Hash new password and save
+    const hashedPassword = hashPassword(newPassword);
+    await userStore.updateUserPassword(normEmail, hashedPassword);
+
+    pendingPasswordResets.delete(normEmail);
+
+    return res.json({
+      success: true,
+      message: 'Your password has been successfully reset! You can now sign in with your new password.',
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    return res.status(500).json({ success: false, message: 'Password reset failed. Please try again.' });
   }
 });
 

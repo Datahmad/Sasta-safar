@@ -650,6 +650,46 @@ export async function loginUser(email, password) {
 }
 
 /**
+ * Request password reset 6-digit OTP
+ */
+export async function requestForgotPassword(email) {
+  try {
+    const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Could not send reset code');
+    }
+    return data;
+  } catch (err) {
+    throw err;
+  }
+}
+
+/**
+ * Verify OTP and reset password
+ */
+export async function resetPassword({ email, otp, newPassword }) {
+  try {
+    const res = await fetch(`${API_BASE}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp, newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Password reset failed');
+    }
+    return data;
+  } catch (err) {
+    throw err;
+  }
+}
+
+/**
  * IP-based geolocation fallback for instant, guaranteed starting location auto-fetch
  */
 export async function fetchIpLocation() {

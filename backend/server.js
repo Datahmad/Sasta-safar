@@ -23,6 +23,20 @@ app.use((req, res, next) => {
   next();
 });
 
+// Database Connection Middleware for Serverless Execution
+// Ensures MongoDB Atlas is connected and seeded before routes execute
+app.use(async (req, res, next) => {
+  try {
+    const conn = await connectDB();
+    if (conn) {
+      await syncSeedUsersToMongo();
+    }
+  } catch (err) {
+    console.warn('[DB Serverless Middleware Notice]:', err.message);
+  }
+  next();
+});
+
 // API Routes
 app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);

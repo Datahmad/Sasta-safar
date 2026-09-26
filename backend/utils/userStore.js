@@ -12,28 +12,6 @@ const SEED_USERS_FILE = path.join(__dirname, '..', 'data', 'seed_users.json');
 // Permanent embedded seed accounts to ensure original registration data is never lost
 const FALLBACK_SEED_USERS = [
   {
-    id: "usr_1790367458711_vujiv",
-    name: "ahmed",
-    email: "ahmedographyy@gmail.com",
-    phone: "",
-    password: "b8268c8a546c5ea69fd9c22bb2940169:ac30d3822150d1dc4c37ced590307bf35e8e56b193bbe56bf1ca4752de1525abd05e84371d95a73401856157850236b32dfa6ac7a7bbca55dc46d2e454d27cec",
-    isVerified: true,
-    defaultCurrency: "Rs",
-    defaultFuelAverage: 14,
-    createdAt: "2026-09-25T20:17:38.711Z"
-  },
-  {
-    id: "usr_1790366049304_egqy9",
-    name: "ahmed",
-    email: "alto1098765@gmail.com",
-    phone: "",
-    password: "c01605a1c3030020a509581fec37429b:eaa2601e82c2d6244d01bb34a008b8cabbda7dafdf40cb218597856cd49f783882534c0bd92e3970a66f8dcff9c46b3ea18985b1061df3906d25280a27358c8c",
-    isVerified: true,
-    defaultCurrency: "Rs",
-    defaultFuelAverage: 14,
-    createdAt: "2026-09-25T19:54:09.304Z"
-  },
-  {
     id: "usr_test_1790432376554",
     name: "Test User",
     email: "test@gmail.com",
@@ -359,6 +337,43 @@ async function getAllUsersAsync() {
   return Array.from(mergedMap.values());
 }
 
+async function updateUserPassword(email, newHashedPassword) {
+  if (!email || !newHashedPassword) return false;
+  const normEmail = email.toLowerCase().trim();
+
+  // 1. Update in memory
+  if (memoryUsers.has(normEmail)) {
+    const u = memoryUsers.get(normEmail);
+    u.password = newHashedPassword;
+    memoryUsers.set(normEmail, u);
+  }
+
+  // 2. Update on disk
+  try {
+    const list = readLocalUsers();
+    const idx = list.findIndex((u) => u.email.toLowerCase().trim() === normEmail);
+    if (idx !== -1) {
+      list[idx].password = newHashedPassword;
+      writeLocalUsers(list);
+    }
+  } catch (err) {
+    console.warn('[UserStore password disk write warn]:', err.message);
+  }
+
+  // 3. Update in MongoDB
+  if (getStatus()) {
+    try {
+      await User.findOneAndUpdate({ email: normEmail }, { password: newHashedPassword });
+      console.log(`[MongoDB] Password updated successfully for ${normEmail}`);
+      return true;
+    } catch (err) {
+      console.error('[MongoDB Password Update Error]:', err.message);
+    }
+  }
+
+  return true;
+}
+
 module.exports = {
   findUserByEmail,
   saveVerifiedUser,
@@ -368,4 +383,5 @@ module.exports = {
   getAllUsers,
   getAllUsersAsync,
   syncSeedUsersToMongo,
+  updateUserPassword,
 };

@@ -4,6 +4,11 @@ let isConnected = false;
 let connectionPromise = null;
 
 const connectDB = async () => {
+  if (mongoose.connection && mongoose.connection.readyState === 1) {
+    isConnected = true;
+    return mongoose.connection;
+  }
+
   const uri = process.env.MONGODB_URI;
 
   // On Vercel / serverless, don't attempt to connect to localhost 127.0.0.1 (it doesn't exist)
@@ -14,17 +19,18 @@ const connectDB = async () => {
 
   const finalUri = uri || 'mongodb://127.0.0.1:27017/fuel_route_planner';
 
-  if (isConnected && mongoose.connection.readyState === 1) {
-    return mongoose.connection;
-  }
-
   if (connectionPromise) {
-    return connectionPromise;
+    try {
+      return await connectionPromise;
+    } catch {
+      connectionPromise = null;
+    }
   }
 
   try {
     connectionPromise = mongoose.connect(finalUri, {
-      serverSelectionTimeoutMS: 4000,
+      serverSelectionTimeoutMS: 5000,
+      bufferCommands: false,
     });
     const conn = await connectionPromise;
     isConnected = true;
@@ -39,6 +45,6 @@ const connectDB = async () => {
   }
 };
 
-const getStatus = () => isConnected || (mongoose.connection && mongoose.connection.readyState === 1);
+const getStatus = () => Boolean(mongoose.connection && mongoose.connection.readyState === 1);
 
 module.exports = { connectDB, getStatus };
