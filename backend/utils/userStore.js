@@ -319,6 +319,35 @@ function getAllUsers() {
   return readLocalUsers();
 }
 
+async function getAllUsersAsync() {
+  const mergedMap = new Map();
+  // 1. Get seed + memory + local disk users
+  readLocalUsers().forEach(u => {
+    mergedMap.set(u.email.toLowerCase().trim(), u);
+  });
+
+  // 2. Fetch from MongoDB if connected
+  if (getStatus()) {
+    try {
+      const dbUsers = await User.find({});
+      dbUsers.forEach(dbU => {
+        mergedMap.set(dbU.email.toLowerCase().trim(), {
+          id: dbU._id.toString(),
+          name: dbU.name,
+          email: dbU.email,
+          phone: dbU.phone || '',
+          password: dbU.password,
+          isVerified: dbU.isVerified !== false,
+          createdAt: dbU.createdAt,
+        });
+      });
+    } catch (e) {
+      console.error('[Admin DB Users Fetch Error]:', e.message);
+    }
+  }
+  return Array.from(mergedMap.values());
+}
+
 module.exports = {
   findUserByEmail,
   saveVerifiedUser,
@@ -326,5 +355,6 @@ module.exports = {
   getPendingVerification,
   clearPendingVerification,
   getAllUsers,
+  getAllUsersAsync,
   syncSeedUsersToMongo,
 };

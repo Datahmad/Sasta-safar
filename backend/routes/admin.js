@@ -60,15 +60,28 @@ router.post('/verify', (req, res) => {
  * GET /api/admin/overview
  * Real-time overview of all registered users and user journeys (where to where)
  */
-router.get('/overview', superadminMiddleware, (req, res) => {
+router.get('/overview', superadminMiddleware, async (req, res) => {
   try {
-    const rawUsers = userStore.getAllUsers();
-    const journeys = activityStore.getAllJourneys();
+    const rawUsers = await userStore.getAllUsersAsync();
+    const allJourneys = activityStore.getAllJourneys(); // Calculation logs
+
+    // Dynamically require TripService to avoid circular dep issues
+    const { TripService } = require('../models/Trip');
+    const savedTrips = await TripService.getAll(); // User saved trips
 
     const cleanUsers = rawUsers.map((u) => {
-      const userJourneys = journeys.filter(
-        (j) => j.user?.email && j.user.email.toLowerCase().trim() === u.email.toLowerCase().trim()
+      const emailLower = u.email.toLowerCase().trim();
+      
+      // Get anonymous calculation logs
+      const calcLogs = allJourneys.filter(
+        (j) => j.user?.email && j.user.email.toLowerCase().trim() === emailLower
       );
+
+      // Get explicitly saved trips (from MongoDB)
+      const userSavedTrips = savedTrips.filter(
+        (t) => t.user?.email && t.user.email.toLowerCase().trim() === emailLower
+      );
+
       return {
         id: u.id,
         name: u.name,
@@ -76,8 +89,9 @@ router.get('/overview', superadminMiddleware, (req, res) => {
         phone: u.phone || 'N/A',
         isVerified: u.isVerified !== false,
         createdAt: u.createdAt,
-        tripCount: userJourneys.length,
-        journeys: userJourneys,
+        tripCount: userSavedTrips.length, // use saved trips for the primary count
+        journeys: calcLogs,
+        savedTrips: userSavedTrips,
       };
     });
 
@@ -85,10 +99,12 @@ router.get('/overview', superadminMiddleware, (req, res) => {
       success: true,
       stats: {
         totalUsers: cleanUsers.length,
-        totalJourneys: journeys.length,
+        totalJourneys: allJourneys.length,
+        totalSavedTrips: savedTrips.length,
       },
       users: cleanUsers,
-      journeys: journeys,
+      journeys: allJourneys,
+      savedTrips: savedTrips,
     });
   } catch (error) {
     console.error('[Admin Overview Error]:', error);

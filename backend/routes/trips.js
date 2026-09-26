@@ -56,6 +56,7 @@ router.post('/', async (req, res) => {
       costPerKm: parseFloat(costPerKm),
       notes: notes || '',
       summary: summary || '',
+      user: req.body.user || null,
     });
 
     res.status(201).json({ success: true, message: 'Trip successfully saved!', data: savedTrip });

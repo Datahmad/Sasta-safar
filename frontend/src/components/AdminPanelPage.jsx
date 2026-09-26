@@ -434,11 +434,60 @@ export default function AdminPanelPage({ currentUser, onSwitchToApp, onLogout })
                         </div>
                       </div>
 
-                      {/* Journeys Timeline for this User */}
+                      {/* Saved Trips & Vehicles for this User */}
                       <div className="space-y-2.5">
+                        <h4 className="text-[11px] font-medium uppercase tracking-wider text-emerald-500 flex items-center gap-1.5 mt-2">
+                          <Car className="w-3 h-3" />
+                          <span>Saved Trips & Vehicles</span>
+                        </h4>
+
+                        {!activeUser.savedTrips || activeUser.savedTrips.length === 0 ? (
+                          <div className="text-center py-6 px-4 rounded-lg bg-zinc-900/60 border border-zinc-800/80">
+                            <p className="text-xs font-medium text-zinc-400">No saved trips</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                            {activeUser.savedTrips.map((t) => (
+                              <div
+                                key={t._id}
+                                className="bg-zinc-950 border border-emerald-900/50 rounded-lg p-3 hover:border-emerald-800/80 transition"
+                              >
+                                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-2 pb-2 border-b border-zinc-800/50">
+                                  <div className="flex items-center space-x-2 text-xs">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                                    <span className="font-bold text-white">{t.origin?.name || 'Origin'}</span>
+                                    <ArrowRight className="w-3 h-3 text-zinc-500" />
+                                    <span className="font-bold text-white">{t.destination?.name || 'Destination'}</span>
+                                  </div>
+                                  <div className="text-[10px] text-zinc-400 font-mono shrink-0">
+                                    {formatDate(t.createdAt)}
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-300 font-mono">
+                                  <span className="bg-zinc-900 px-2 py-1 rounded text-emerald-400 font-bold border border-zinc-800">
+                                    {t.vehicle?.name || 'Custom Vehicle'}
+                                  </span>
+                                  <span className="bg-zinc-900 px-2 py-1 rounded border border-zinc-800">
+                                    {t.vehicle?.fuelAverageKmPerLiter || '-'} km/L
+                                  </span>
+                                  <span className="bg-zinc-900 px-2 py-1 rounded border border-zinc-800 text-amber-400">
+                                    {t.currency}{t.totalFuelCost}
+                                  </span>
+                                  <span className="bg-zinc-900 px-2 py-1 rounded border border-zinc-800">
+                                    {t.distanceKm} km
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Journeys Timeline for this User */}
+                      <div className="space-y-2.5 mt-6">
                         <h4 className="text-[11px] font-medium uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
                           <Navigation className="w-3 h-3 text-zinc-400" />
-                          <span>Planned Routes & Search History</span>
+                          <span>Search History (Anonymous Logs)</span>
                         </h4>
 
                         {userJourneys.length === 0 ? (

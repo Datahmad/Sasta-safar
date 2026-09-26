@@ -32,6 +32,11 @@ const TripSchema = new mongoose.Schema(
     costPerKm: { type: Number, required: true },
     notes: { type: String, default: '' },
     summary: { type: String, default: '' },
+    user: {
+      id: { type: String },
+      name: { type: String },
+      email: { type: String },
+    },
   },
   { timestamps: true }
 );

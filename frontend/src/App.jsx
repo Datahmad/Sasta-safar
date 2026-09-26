@@ -194,6 +194,11 @@ export default function App() {
         totalFuelCost: cost,
         costPerKm,
         summary: activeRoute.summary,
+        user: currentUser ? {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email
+        } : null
       };
 
       const saved = await saveTrip(tripPayload);
