@@ -152,78 +152,123 @@ export default function LocationInput({
     setIsLocatingUser(true);
     isManuallyClearedRef.current = false;
 
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const { latitude, longitude, accuracy } = pos.coords;
-          console.log(`[GPS Fix Acquired]: ${latitude}, ${longitude} (accuracy: ${accuracy}m)`);
+    const handleSuccess = async (pos) => {
+      try {
+        const { latitude, longitude, accuracy } = pos.coords;
+        console.log(`[GPS Fix Acquired]: ${latitude}, ${longitude} (accuracy: ${accuracy}m)`);
 
-          const initialLoc = {
-            name: `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
+        const initialLoc = {
+          name: `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
+          lat: latitude,
+          lon: longitude,
+          city: null,
+          countryCode: 'pk',
+          isCurrentLocation: true,
+          accuracy,
+        };
+
+        setUserGpsLocation(initialLoc);
+
+        if (!isManuallyClearedRef.current) {
+          setOrigin(initialLoc);
+          setOriginQuery(initialLoc.name);
+          if (onViewOnMap) onViewOnMap(initialLoc);
+        }
+
+        // Cache valid device GPS in sessionStorage for instant retrieval on next refresh
+        try {
+          sessionStorage.setItem(
+            'sasta_device_gps',
+            JSON.stringify({ loc: initialLoc, timestamp: Date.now() })
+          );
+        } catch {}
+
+        setIsLocatingUser(false);
+
+        // Reverse geocode to exact colony/society/street name in Pakistan
+        const rev = await reverseGeocode(latitude, longitude);
+        if (rev && !isManuallyClearedRef.current) {
+          const cityName = rev?.city || rev?.address?.city || rev?.address?.town || null;
+          const countryCode = rev?.countryCode || rev?.address?.country_code || 'pk';
+          const resolvedName = rev?.displayName || initialLoc.name;
+
+          const loc = {
+            name: resolvedName,
             lat: latitude,
             lon: longitude,
-            city: null,
-            countryCode: 'pk',
+            city: cityName,
+            countryCode,
             isCurrentLocation: true,
             accuracy,
           };
 
-          setUserGpsLocation(initialLoc);
+          setUserGpsLocation(loc);
+          setOrigin(loc);
+          setOriginQuery(resolvedName);
 
-          if (!isManuallyClearedRef.current) {
-            setOrigin(initialLoc);
-            setOriginQuery(initialLoc.name);
-            if (onViewOnMap) onViewOnMap(initialLoc);
+          try {
+            sessionStorage.setItem(
+              'sasta_device_gps',
+              JSON.stringify({ loc, timestamp: Date.now() })
+            );
+          } catch {}
+
+          if (countryCode && onCountryDetected) {
+            onCountryDetected(countryCode);
           }
-
-          setIsLocatingUser(false);
-
-          // Reverse geocode to exact colony/society/street name in Pakistan
-          const rev = await reverseGeocode(latitude, longitude);
-          if (rev && !isManuallyClearedRef.current) {
-            const cityName = rev?.city || rev?.address?.city || rev?.address?.town || null;
-            const countryCode = rev?.countryCode || rev?.address?.country_code || 'pk';
-            const resolvedName = rev?.displayName || initialLoc.name;
-
-            const loc = {
-              name: resolvedName,
-              lat: latitude,
-              lon: longitude,
-              city: cityName,
-              countryCode,
-              isCurrentLocation: true,
-              accuracy,
-            };
-
-            setUserGpsLocation(loc);
-            setOrigin(loc);
-            setOriginQuery(resolvedName);
-
-            if (countryCode && onCountryDetected) {
-              onCountryDetected(countryCode);
-            }
-          }
-        } catch (err) {
-          console.warn('Reverse geocode notice:', err);
-        } finally {
-          setIsLocatingUser(false);
         }
-      },
-      (err) => {
-        console.warn('GPS location request warning:', err.message);
+      } catch (err) {
+        console.warn('Reverse geocode notice:', err);
+      } finally {
         setIsLocatingUser(false);
+      }
+    };
+
+    // Tier 1: True High-Accuracy Hardware GPS (accepts recent warm fix up to 5 min old for instant speed)
+    navigator.geolocation.getCurrentPosition(
+      handleSuccess,
+      (highAccErr) => {
+        console.warn('[GPS High Accuracy Notice]:', highAccErr.message, 'Trying device Wi-Fi/cellular location...');
+        // Tier 2: Standard Device Location fallback (if indoors or satellites blocked)
+        navigator.geolocation.getCurrentPosition(
+          handleSuccess,
+          (stdErr) => {
+            console.warn('[GPS Standard Accuracy Notice]:', stdErr.message);
+            setIsLocatingUser(false);
+          },
+          {
+            timeout: 10000,
+            enableHighAccuracy: false,
+            maximumAge: 600000, // 10 min device fix
+          }
+        );
       },
       {
-        timeout: 15000,
-        enableHighAccuracy: true, // Forces true device hardware GPS sensor
-        maximumAge: 0,            // Never use stale or cached location
+        timeout: 10000,
+        enableHighAccuracy: true,
+        maximumAge: 300000, // 5 min cache allows instant return if device recently locked GPS
       }
     );
   };
 
-  // Auto-fetch real GPS location on load
+  // Auto-fetch real GPS location on load (with 0ms session recovery)
   useEffect(() => {
     if (!origin) {
+      // 1. Instantly restore recent valid GPS from session memory (0ms load)
+      try {
+        const cached = sessionStorage.getItem('sasta_device_gps');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed?.loc?.lat && parsed?.loc?.lon && Date.now() - parsed.timestamp < 3600000) {
+            setOrigin(parsed.loc);
+            setOriginQuery(parsed.loc.name);
+            setUserGpsLocation(parsed.loc);
+            if (onViewOnMap) onViewOnMap(parsed.loc);
+          }
+        }
+      } catch {}
+
+      // 2. Fetch fresh live GPS in background to refine/update coordinates
       handleUseCurrentLocation();
     }
   }, []);
