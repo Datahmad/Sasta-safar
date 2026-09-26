@@ -155,12 +155,9 @@ const getAvatarSvg = (avatarType = 'arrow') => {
   }
 };
 
-// Create 3D Navigation Vehicle Pointer with Directional Heading, Exact Blue Pointer Footprint & Custom Avatar
-const createVehiclePin = (heading = 0, isHeadingUp = false, avatarType = 'arrow') => {
-  // If the map is in Heading-Up mode, the map already rotates to match vehicle heading,
-  // so the vehicle arrow/avatar inside the map points forward (0 deg = straight UP).
-  // If in North-Up mode, the vehicle points to the heading angle.
-  const visualHeading = isHeadingUp ? 0 : heading;
+// Create Navigation Vehicle Pointer with Directional Heading, Exact Blue Pointer Footprint & Custom Avatar
+const createVehiclePin = (heading = 0, avatarType = 'arrow') => {
+  const visualHeading = heading;
   const svgHtml = getAvatarSvg(avatarType);
   return L.divIcon({
     className: 'custom-vehicle-marker',
@@ -178,7 +175,7 @@ const createVehiclePin = (heading = 0, isHeadingUp = false, avatarType = 'arrow'
 };
 
 // Calculate target camera center with forward lookahead so vehicle is positioned in lower 30% of screen
-const calculateCameraTarget = (pos, head = 0, speed = 0, headingUp = true) => {
+const calculateCameraTarget = (pos, head = 0, speed = 0) => {
   if (!pos || pos[0] == null || pos[1] == null) return pos;
 
   // Lookahead distance in meters (longer lookahead at higher speeds)
@@ -198,14 +195,12 @@ const calculateSpeedZoom = (speed = 0) => {
   return 16.8;                 // Highway cruising
 };
 
-// Camera Controller for Drive Mode: Road-level close zoom, lower-third forward perspective & auto-tracking
+// Camera Controller for Drive Mode: Road-level close zoom & auto-tracking
 function DriveModeCameraController({
   isDriveMode,
   userPos,
   heading,
   speedKmH = 0,
-  isHeadingUp = true,
-  is3DMode = true,
   userHasPanned = false,
   setUserHasPanned,
   recenterTrigger = 0,
@@ -213,12 +208,12 @@ function DriveModeCameraController({
   const map = useMap();
   const hasZoomedInRef = useRef(false);
 
-  // Invalidate size when entering drive mode or toggling rotation or 3D tilt
+  // Invalidate size when entering drive mode
   useEffect(() => {
     if (map) {
       setTimeout(() => map.invalidateSize({ animate: false }), 200);
     }
-  }, [isDriveMode, isHeadingUp, is3DMode, map]);
+  }, [isDriveMode, map]);
 
   // Pause auto-follow when user touches or drags the map
   useMapEvents({
@@ -251,7 +246,7 @@ function DriveModeCameraController({
     }
 
     if (userPos && userPos[0] != null && userPos[1] != null && map) {
-      const targetPos = calculateCameraTarget(userPos, heading, speedKmH, isHeadingUp);
+      const targetPos = calculateCameraTarget(userPos, heading, speedKmH);
       const targetZoom = calculateSpeedZoom(speedKmH);
 
       if (!hasZoomedInRef.current) {
@@ -269,13 +264,13 @@ function DriveModeCameraController({
         });
       }
     }
-  }, [isDriveMode, userPos, heading, speedKmH, isHeadingUp, userHasPanned, map]);
+  }, [isDriveMode, userPos, heading, speedKmH, userHasPanned, map]);
 
   // Handle explicit recenter button tap
   useEffect(() => {
     if (isDriveMode && userPos && userPos[0] != null && userPos[1] != null && map && recenterTrigger > 0) {
       if (setUserHasPanned) setUserHasPanned(false);
-      const targetPos = calculateCameraTarget(userPos, heading, speedKmH, isHeadingUp);
+      const targetPos = calculateCameraTarget(userPos, heading, speedKmH);
       const targetZoom = calculateSpeedZoom(speedKmH);
       map.flyTo(targetPos, targetZoom, {
         animate: true,
@@ -466,8 +461,6 @@ export default function MapView({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [tripSummary, setTripSummary] = useState(null);
   const [recenterDriveTrigger, setRecenterDriveTrigger] = useState(0);
-  const [isHeadingUp, setIsHeadingUp] = useState(true);
-  const [is3DMode, setIs3DMode] = useState(true);
   const [avatarChoice, setAvatarChoice] = useState('auto'); // 'auto' | 'arrow' | 'bike' | 'car' | 'suv' | 'truck'
   const activeAvatar = resolveVehicleAvatar(avatarChoice, vehicleName);
   const [userHasPanned, setUserHasPanned] = useState(false);
@@ -571,7 +564,6 @@ export default function MapView({
     const secondCoord = selectedRoute.coordinates[1] || startCoord;
     setVehiclePos(startCoord);
     setVehicleHeading(calcBearing(startCoord[0], startCoord[1], secondCoord[0], secondCoord[1]));
-    setIsHeadingUp(true);
     setUserHasPanned(false);
     acquireWakeLock();
 
@@ -945,18 +937,18 @@ export default function MapView({
       {/* DRIVE MODE: Floating Top-Right Controls (Compass Needle, 3D/2D Toggle, Avatar Switcher) */}
       {activeDriveMode && (
         <div className="absolute top-20 right-3 sm:right-4 z-30 animate-in fade-in slide-in-from-right-3 duration-300 print:hidden flex flex-col items-center gap-2">
-          {/* Compass / Heading-Up Rotation Toggle (Google Maps Style) */}
+          {/* Compass / Recenter Button (Google Maps Style) */}
           <button
             type="button"
-            onClick={() => setIsHeadingUp((h) => !h)}
+            onClick={() => setRecenterDriveTrigger((c) => c + 1)}
             className="w-11 h-11 rounded-full bg-white/95 hover:bg-white text-zinc-800 shadow-xl border border-zinc-300 backdrop-blur-md flex flex-col items-center justify-center transition active:scale-90 cursor-pointer group"
-            title={isHeadingUp ? 'Heading-Up (Road points forward). Tap for North-Up.' : 'North-Up. Tap for Heading-Up (Road points forward).'}
+            title="Recenter Map on Vehicle"
           >
             {/* Rotating 2-Tone Compass Needle */}
             <div
               className="relative w-6 h-6 flex items-center justify-center transition-transform duration-300 ease-out"
               style={{
-                transform: isHeadingUp ? `rotate(${vehicleHeading}deg)` : 'rotate(0deg)',
+                transform: `rotate(${vehicleHeading}deg)`,
               }}
             >
               {/* North Needle (Red) */}
@@ -967,26 +959,7 @@ export default function MapView({
               <div className="w-1.5 h-1.5 rounded-full bg-zinc-900 border border-white z-10" />
             </div>
             <span className="text-[8px] font-black uppercase text-zinc-600 -mt-0.5 font-mono leading-none">
-              {isHeadingUp ? 'HDG' : 'N'}
-            </span>
-          </button>
-
-          {/* 3D / 2D Perspective Toggle Button (Google Maps Style) */}
-          <button
-            type="button"
-            onClick={() => setIs3DMode((v) => !v)}
-            className={`w-11 h-11 rounded-full shadow-xl border backdrop-blur-md flex flex-col items-center justify-center transition active:scale-90 cursor-pointer ${
-              is3DMode
-                ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/30'
-                : 'bg-white/95 hover:bg-white text-zinc-800 border-zinc-300'
-            }`}
-            title={is3DMode ? '3D Driving Perspective active. Tap for 2D flat view.' : '2D Flat view active. Tap for 3D driving perspective.'}
-          >
-            <span className="text-xs font-black font-mono tracking-tight leading-none">
-              {is3DMode ? '3D' : '2D'}
-            </span>
-            <span className="text-[7px] font-bold uppercase tracking-wider opacity-80 mt-0.5">
-              Tilt
+              N
             </span>
           </button>
 
@@ -1253,88 +1226,56 @@ export default function MapView({
         </div>
       )}
 
-      {/* 3D Perspective Viewport for Google Maps Style Driving View */}
-      <div
-        className="w-full h-full relative overflow-hidden"
-        style={{
-          perspective: activeDriveMode && is3DMode && !userHasPanned ? '700px' : 'none',
-          perspectiveOrigin: '50% 70%',
-        }}
-        onTouchStart={() => {
-          if (activeDriveMode && !userHasPanned) setUserHasPanned(true);
-        }}
-        onMouseDown={() => {
-          if (activeDriveMode && !userHasPanned) setUserHasPanned(true);
-        }}
-        onWheel={() => {
-          if (activeDriveMode && !userHasPanned) setUserHasPanned(true);
-        }}
-      >
-        <div
-          className="w-full h-full transition-transform duration-500 ease-out overflow-hidden"
-          style={{
-            transformOrigin: activeDriveMode && is3DMode && !userHasPanned ? '50% 70%' : 'center center',
-            transform:
-              activeDriveMode && is3DMode && isHeadingUp && !userHasPanned
-                ? `rotateX(48deg) rotate(${-vehicleHeading}deg) scale(1.45)`
-                : activeDriveMode && is3DMode && !isHeadingUp && !userHasPanned
-                ? `rotateX(48deg) scale(1.45)`
-                : activeDriveMode && !is3DMode && isHeadingUp && !userHasPanned
-                ? `rotate(${-vehicleHeading}deg) scale(1.3)`
-                : 'none',
-            transformStyle: 'preserve-3d',
-          }}
+      {/* Clean Full-Bleed Map Viewport */}
+      <div className="w-full h-full relative overflow-hidden">
+        <MapContainer
+          center={defaultCenter}
+          zoom={defaultZoom}
+          scrollWheelZoom={true}
+          className="w-full h-full"
         >
-          <MapContainer
-            center={defaultCenter}
-            zoom={defaultZoom}
-            scrollWheelZoom={true}
-            className="w-full h-full"
-          >
-            {/* Fast Cached OpenStreetMap Tiles */}
-            <TileLayer
-              key={activeStyleKey}
-              attribution={activeTile.attribution}
-              url={activeTile.url}
-              subdomains={activeTile.subdomains || ['a', 'b', 'c']}
-              maxZoom={19}
-              keepBuffer={6}
-              updateWhenZooming={false}
-              updateInterval={100}
-            />
+          {/* Fast Cached OpenStreetMap Tiles */}
+          <TileLayer
+            key={activeStyleKey}
+            attribution={activeTile.attribution}
+            url={activeTile.url}
+            subdomains={activeTile.subdomains || ['a', 'b', 'c']}
+            maxZoom={19}
+            keepBuffer={6}
+            updateWhenZooming={false}
+            updateInterval={100}
+          />
 
-            {/* Dynamic Bounds & Camera Manager */}
-            <MapBoundsUpdater
-              origin={origin}
-              destination={destination}
-              selectedRoute={selectedRoute}
-              mobileTab={mobileTab}
-              reCenterTrigger={reCenterTrigger}
-              focusLocation={focusLocation}
-              isDriveMode={activeDriveMode}
-            />
+          {/* Dynamic Bounds & Camera Manager */}
+          <MapBoundsUpdater
+            origin={origin}
+            destination={destination}
+            selectedRoute={selectedRoute}
+            mobileTab={mobileTab}
+            reCenterTrigger={reCenterTrigger}
+            focusLocation={focusLocation}
+            isDriveMode={activeDriveMode}
+          />
 
-            {/* Drive Mode Camera Controller: Road-level close zoom, lower-third forward perspective & auto-tracking */}
-            <DriveModeCameraController
-              isDriveMode={activeDriveMode}
-              userPos={vehiclePos}
-              heading={vehicleHeading}
-              speedKmH={speedKmH}
-              isHeadingUp={isHeadingUp}
-              is3DMode={is3DMode}
-              userHasPanned={userHasPanned}
-              setUserHasPanned={setUserHasPanned}
-              recenterTrigger={recenterDriveTrigger}
-            />
+          {/* Drive Mode Camera Controller: Road-level close zoom & auto-tracking */}
+          <DriveModeCameraController
+            isDriveMode={activeDriveMode}
+            userPos={vehiclePos}
+            heading={vehicleHeading}
+            speedKmH={speedKmH}
+            userHasPanned={userHasPanned}
+            setUserHasPanned={setUserHasPanned}
+            recenterTrigger={recenterDriveTrigger}
+          />
 
-            {/* Live Drive Mode Vehicle Pointer Marker */}
-            {activeDriveMode && vehiclePos && (
-              <Marker
-                position={vehiclePos}
-                icon={createVehiclePin(vehicleHeading, isHeadingUp && activeDriveMode, activeAvatar)}
-                zIndexOffset={1000}
-              />
-            )}
+          {/* Live Drive Mode Vehicle Pointer Marker */}
+          {activeDriveMode && vehiclePos && (
+            <Marker
+              position={vehiclePos}
+              icon={createVehiclePin(vehicleHeading, activeAvatar)}
+              zIndexOffset={1000}
+            />
+          )}
 
         {/* Map Click Interaction Handler */}
         <MapClickHandler
@@ -1459,7 +1400,6 @@ export default function MapView({
               );
             })}
       </MapContainer>
-        </div>
       </div>
 
       {/* Trip Completed Receipt Modal */}
