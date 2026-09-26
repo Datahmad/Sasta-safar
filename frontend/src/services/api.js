@@ -32,16 +32,24 @@ export async function searchPlaces(query, context = {}) {
     console.warn('[API searchPlaces proxy error, attempting direct fallback]:', err);
   }
 
-  // Direct client-side fallback to Nominatim (100% free) with in-city calculation
+  // Direct client-side fallback to Nominatim + Photon (100% free) with smart in-city calculation
   try {
+    const hasExplicitCityOrComma =
+      query.includes(',') ||
+      /(faisalabad|lahore|islamabad|rawalpindi|karachi|peshawar|multan|quetta|sialkot|gujranwala|hyderabad|abbottabad|bahawalpur|sargodha|sukkur|murree|swat)/i.test(
+        query
+      );
+
     const directParams = new URLSearchParams({
       q: query,
       format: 'json',
       addressdetails: '1',
-      limit: '8',
+      limit: '12',
     });
     if (country) directParams.append('countrycodes', country.toLowerCase());
-    if (lat != null && lon != null && !isNaN(lat) && !isNaN(lon)) {
+    
+    // Only bias viewbox if NO explicit city or comma in query
+    if (!hasExplicitCityOrComma && lat != null && lon != null && !isNaN(lat) && !isNaN(lon)) {
       const deltaLat = 0.35;
       const deltaLon = 0.35 / Math.max(0.1, Math.cos((lat * Math.PI) / 180));
       directParams.append(
@@ -51,82 +59,192 @@ export async function searchPlaces(query, context = {}) {
       directParams.append('bounded', '0');
     }
 
-    const directRes = await fetch(
-      `https://nominatim.openstreetmap.org/search?${directParams.toString()}`
-    );
-    if (directRes.ok) {
-      const list = await directRes.json();
-      const results = list.map((item) => {
-        const itemLat = parseFloat(item.lat);
-        const itemLon = parseFloat(item.lon);
-        const itemCountry = item.address?.country_code?.toLowerCase() || null;
-        const itemCity =
-          item.address?.city ||
-          item.address?.town ||
-          item.address?.village ||
-          item.address?.suburb ||
-          null;
+    // Run Nominatim and Photon in parallel for maximum recall
+    const nominatimFetch = fetch(`https://nominatim.openstreetmap.org/search?${directParams.toString()}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .catch(() => []);
 
-        let distKm = null;
-        if (lat != null && lon != null && !isNaN(lat) && !isNaN(lon)) {
-          const R = 6371;
-          const dLat = ((itemLat - lat) * Math.PI) / 180;
-          const dLon = ((itemLon - lon) * Math.PI) / 180;
-          const a =
-            Math.sin(dLat / 2) ** 2 +
-            Math.cos((lat * Math.PI) / 180) *
-              Math.cos((itemLat * Math.PI) / 180) *
-              Math.sin(dLon / 2) ** 2;
-          distKm = parseFloat((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1));
-        }
+    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=12${
+      !hasExplicitCityOrComma && lat != null && lon != null ? `&lat=${lat}&lon=${lon}` : ''
+    }`;
+    const photonFetch = fetch(photonUrl)
+      .then((r) => (r.ok ? r.json() : { features: [] }))
+      .catch(() => ({ features: [] }));
 
-        const isCityMatch = city && itemCity && itemCity.toLowerCase() === city.toLowerCase();
-        const isClose = distKm != null && distKm <= 40;
-        const isInCity = Boolean(isCityMatch || isClose);
-        const isInCountry = Boolean(country && itemCountry === country.toLowerCase());
+    const [nominatimList, photonData] = await Promise.all([nominatimFetch, photonFetch]);
+    const results = [];
+    const seenCoordinates = new Set();
 
-        let tier = 3;
-        let tierLabel = 'International';
-        if (isInCity) {
-          tier = 1;
-          tierLabel = 'In-City';
-        } else if (isInCountry) {
-          tier = 2;
-          tierLabel = 'In-Country';
-        }
+    const isDuplicate = (itemLat, itemLon) => {
+      const key = `${itemLat.toFixed(3)}_${itemLon.toFixed(3)}`;
+      if (seenCoordinates.has(key)) return true;
+      seenCoordinates.add(key);
+      return false;
+    };
 
-        return {
-          id: item.place_id,
-          displayName: item.display_name,
-          lat: itemLat,
-          lon: itemLon,
-          type: item.type,
-          class: item.class,
-          address: item.address,
+    // Format Nominatim
+    (nominatimList || []).forEach((item) => {
+      const itemLat = parseFloat(item.lat);
+      const itemLon = parseFloat(item.lon);
+      if (isNaN(itemLat) || isNaN(itemLon) || isDuplicate(itemLat, itemLon)) return;
+
+      const itemCountry = item.address?.country_code?.toLowerCase() || null;
+      const itemCity =
+        item.address?.city ||
+        item.address?.town ||
+        item.address?.village ||
+        item.address?.suburb ||
+        item.address?.district ||
+        null;
+
+      let distKm = null;
+      if (lat != null && lon != null && !isNaN(lat) && !isNaN(lon)) {
+        const R = 6371;
+        const dLat = ((itemLat - lat) * Math.PI) / 180;
+        const dLon = ((itemLon - lon) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos((lat * Math.PI) / 180) *
+            Math.cos((itemLat * Math.PI) / 180) *
+            Math.sin(dLon / 2) ** 2;
+        distKm = parseFloat((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1));
+      }
+
+      const isCityMatch = city && itemCity && itemCity.toLowerCase() === city.toLowerCase();
+      const isClose = distKm != null && distKm <= 40;
+      const isInCity = Boolean(isCityMatch || isClose);
+      const isInCountry = Boolean(country && (itemCountry === country.toLowerCase() || itemCountry === 'pk'));
+
+      let tier = 3;
+      let tierLabel = 'International';
+      if (isInCity) {
+        tier = 1;
+        tierLabel = 'In-City';
+      } else if (isInCountry) {
+        tier = 2;
+        tierLabel = 'In-Country';
+      }
+
+      results.push({
+        id: item.place_id,
+        displayName: item.display_name,
+        lat: itemLat,
+        lon: itemLon,
+        type: item.type,
+        class: item.class,
+        address: item.address,
+        city: itemCity,
+        countryCode: itemCountry,
+        country: item.address?.country || null,
+        distanceKm: distKm,
+        tier,
+        tierLabel,
+        isInCity,
+        isLocalCountry: isInCountry,
+        importance: parseFloat(item.importance) || 0.5,
+      });
+    });
+
+    // Format Photon features
+    (photonData?.features || []).forEach((feat) => {
+      const [featLon, featLat] = feat.geometry?.coordinates || [NaN, NaN];
+      if (isNaN(featLat) || isNaN(featLon) || isDuplicate(featLat, featLon)) return;
+
+      const p = feat.properties || {};
+      const itemCountry = (p.countrycode || p.country || '').toLowerCase();
+      const itemCity = p.city || p.district || p.town || p.county || p.locality || p.state || null;
+
+      let distKm = null;
+      if (lat != null && lon != null && !isNaN(lat) && !isNaN(lon)) {
+        const R = 6371;
+        const dLat = ((featLat - lat) * Math.PI) / 180;
+        const dLon = ((featLon - lon) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos((lat * Math.PI) / 180) *
+            Math.cos((featLat * Math.PI) / 180) *
+            Math.sin(dLon / 2) ** 2;
+        distKm = parseFloat((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1));
+      }
+
+      const parts = [
+        p.name,
+        p.street,
+        p.housenumber,
+        p.district,
+        p.city,
+        p.state,
+        p.country,
+      ].filter(Boolean);
+      const displayName = parts.length > 0 ? parts.join(', ') : p.name || 'Unknown Location';
+
+      const isCityMatch = city && itemCity && itemCity.toLowerCase() === city.toLowerCase();
+      const isClose = distKm != null && distKm <= 40;
+      const isInCity = Boolean(isCityMatch || isClose);
+      const isInCountry = Boolean(country && (itemCountry === country.toLowerCase() || itemCountry === 'pk'));
+
+      let tier = 3;
+      let tierLabel = 'International';
+      if (isInCity) {
+        tier = 1;
+        tierLabel = 'In-City';
+      } else if (isInCountry) {
+        tier = 2;
+        tierLabel = 'In-Country';
+      }
+
+      results.push({
+        id: `ph_${p.osm_id || Math.random().toString(36).substring(2, 9)}`,
+        displayName,
+        lat: featLat,
+        lon: featLon,
+        type: p.type || p.osm_value || 'location',
+        class: p.osm_key || 'place',
+        address: {
+          road: p.street,
+          suburb: p.district,
           city: itemCity,
-          countryCode: itemCountry,
-          country: item.address?.country || null,
-          distanceKm: distKm,
-          tier,
-          tierLabel,
-          isInCity,
-          isLocalCountry: isInCountry,
-        };
+          state: p.state,
+          country: p.country,
+          country_code: p.countrycode || 'pk',
+        },
+        city: itemCity,
+        countryCode: itemCountry || 'pk',
+        country: p.country || 'Pakistan',
+        distanceKm: distKm,
+        tier,
+        tierLabel,
+        isInCity,
+        isLocalCountry: isInCountry,
+        importance: 0.6,
       });
+    });
 
-      results.sort((a, b) => {
-        if (a.tier !== b.tier) return a.tier - b.tier;
-        if (a.tier === 1 && a.distanceKm != null && b.distanceKm != null) {
-          return a.distanceKm - b.distanceKm;
-        }
-        if (a.tier === 2 && a.distanceKm != null && b.distanceKm != null) {
-          return a.distanceKm - b.distanceKm;
-        }
-        return 0;
-      });
+    const queryLower = query.toLowerCase();
 
-      return results;
-    }
+    results.sort((a, b) => {
+      if (hasExplicitCityOrComma) {
+        const aMatches =
+          a.displayName.toLowerCase().includes(queryLower) ||
+          (a.city && queryLower.includes(a.city.toLowerCase()));
+        const bMatches =
+          b.displayName.toLowerCase().includes(queryLower) ||
+          (b.city && queryLower.includes(b.city.toLowerCase()));
+        if (aMatches && !bMatches) return -1;
+        if (!aMatches && bMatches) return 1;
+      }
+
+      if (a.tier !== b.tier) return a.tier - b.tier;
+      if (a.tier === 1 && a.distanceKm != null && b.distanceKm != null) {
+        return a.distanceKm - b.distanceKm;
+      }
+      if (a.tier === 2) {
+        return (b.importance || 0.5) - (a.importance || 0.5);
+      }
+      return (b.importance || 0) - (a.importance || 0);
+    });
+
+    return results;
   } catch (err) {
     console.error('[Direct geocode fallback failed]:', err);
   }

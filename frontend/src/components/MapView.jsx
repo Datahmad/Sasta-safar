@@ -44,6 +44,7 @@ function MapBoundsUpdater({
   selectedRoute,
   mobileTab,
   reCenterTrigger,
+  focusLocation,
 }) {
   const map = useMap();
 
@@ -61,9 +62,23 @@ function MapBoundsUpdater({
     };
   }, [map]);
 
+  // Handle direct manual location zoom (e.g. user clicked "View on Map" for Faisalabad or hostel)
+  useEffect(() => {
+    if (focusLocation && focusLocation.lat != null && focusLocation.lon != null && map) {
+      map.invalidateSize({ animate: false });
+      map.flyTo([Number(focusLocation.lat), Number(focusLocation.lon)], focusLocation.zoom || 15, {
+        animate: true,
+        duration: 1.2,
+      });
+    }
+  }, [focusLocation, map]);
+
   const fitView = () => {
     if (!map) return;
     map.invalidateSize({ animate: false });
+
+    // If user just explicitly focused on a specific point, don't immediately overwrite with fitBounds
+    if (focusLocation && !selectedRoute) return;
 
     const isMobile = window.innerWidth < 1024;
     // On mobile, account for top controls and bottom route switcher bar
@@ -147,6 +162,7 @@ export default function MapView({
   mobileTab,
   currency,
   onOpenSteps,
+  focusLocation,
 }) {
   const defaultCenter = [40.7128, -74.006];
   const defaultZoom = 5;
@@ -445,6 +461,7 @@ export default function MapView({
           selectedRoute={selectedRoute}
           mobileTab={mobileTab}
           reCenterTrigger={reCenterTrigger}
+          focusLocation={focusLocation}
         />
 
         {/* Map Click Interaction Handler */}

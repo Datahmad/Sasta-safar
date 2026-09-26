@@ -76,6 +76,60 @@ export default function App() {
   const [isExpenseReportOpen, setIsExpenseReportOpen] = useState(false);
   const [isSavingTrip, setIsSavingTrip] = useState(false);
   const [isTripSaved, setIsTripSaved] = useState(false);
+  const [focusLocation, setFocusLocation] = useState(null);
+
+  // Popular routes for 1-tap testing
+  const QUICK_DEMO_ROUTES = [
+    {
+      label: 'Islamabad ⇄ Faisalabad',
+      origin: { name: 'Islamabad, Pakistan', lat: 33.6844, lon: 73.0479, city: 'Islamabad' },
+      destination: { name: 'Sitara Park City, Faisalabad, Punjab', lat: 31.4250, lon: 73.0900, city: 'Faisalabad' },
+    },
+    {
+      label: 'Lahore ⇄ Islamabad',
+      origin: { name: 'Lahore, Punjab, Pakistan', lat: 31.5204, lon: 74.3587, city: 'Lahore' },
+      destination: { name: 'Islamabad, Pakistan', lat: 33.6844, lon: 73.0479, city: 'Islamabad' },
+    },
+    {
+      label: 'Rawalpindi ⇄ Murree',
+      origin: { name: 'Rawalpindi, Punjab, Pakistan', lat: 33.5651, lon: 73.0169, city: 'Rawalpindi' },
+      destination: { name: 'Murree, Punjab, Pakistan', lat: 33.9070, lon: 73.3943, city: 'Murree' },
+    },
+  ];
+
+  // Helper to zoom directly into a chosen house/street/society on the map
+  const handleViewLocationOnMap = (loc) => {
+    if (!loc || loc.lat == null) return;
+    setFocusLocation({ lat: loc.lat, lon: loc.lon, zoom: 15, name: loc.name });
+    if (window.innerWidth < 1024) {
+      setMobileTab('map');
+    }
+  };
+
+  // Helper to run a 1-tap quick demo trip
+  const handleSelectQuickTrip = (start, dest) => {
+    setOrigin(start);
+    setDestination(dest);
+    setRouteError(null);
+    setIsLoadingRoutes(true);
+    calculateRoutes(start, dest, currentUser)
+      .then((res) => {
+        if (res.routes && res.routes.length > 0) {
+          setRoutes(res.routes);
+          const fastest = res.routes.find((r) => r.isFastest) || res.routes[0];
+          setSelectedRouteId(fastest.id);
+          if (window.innerWidth < 1024) {
+            setMobileTab('map');
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Quick route error:', err);
+      })
+      .finally(() => {
+        setIsLoadingRoutes(false);
+      });
+  };
 
   // Load live fuel rates helper
   const handleFetchLiveFuelRates = async (cc = 'pk') => {
@@ -399,6 +453,51 @@ export default function App() {
             mobileTab === 'map' ? 'hidden lg:flex' : 'flex'
           }`}
         >
+          {/* Quick 3-Step Guided Header & 1-Tap Demo Routes */}
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-zinc-50 border border-emerald-200/90 rounded-xl p-3 shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                <span className="flex h-2 w-2 rounded-full bg-emerald-600 animate-pulse"></span>
+                How Sasta Safar Works (3 Steps)
+              </span>
+              <span className="text-[10px] font-mono text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded font-semibold">
+                Free & Easy
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5 text-center text-[11px] font-medium text-zinc-700">
+              <div className="bg-white border border-emerald-100 rounded-lg p-1.5 shadow-2xs">
+                <span className="font-bold text-emerald-900 block text-xs">1. Locations</span>
+                <span className="text-[10px] text-zinc-500 leading-tight block">Hostel, home or city</span>
+              </div>
+              <div className="bg-white border border-emerald-100 rounded-lg p-1.5 shadow-2xs">
+                <span className="font-bold text-emerald-900 block text-xs">2. Vehicle</span>
+                <span className="text-[10px] text-zinc-500 leading-tight block">Car, bike, km/L</span>
+              </div>
+              <div className="bg-white border border-emerald-100 rounded-lg p-1.5 shadow-2xs">
+                <span className="font-bold text-emerald-900 block text-xs">3. Fuel Bill</span>
+                <span className="text-[10px] text-zinc-500 leading-tight block">Fast vs Short & Rs</span>
+              </div>
+            </div>
+
+            {/* Quick Demo Chips */}
+            <div className="pt-1.5 border-t border-emerald-200/60 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+              <span className="text-[10px] font-bold text-emerald-900 shrink-0 uppercase tracking-wide">
+                Quick Test:
+              </span>
+              {QUICK_DEMO_ROUTES.map((route, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleSelectQuickTrip(route.origin, route.destination)}
+                  className="shrink-0 text-[10px] font-semibold text-emerald-800 hover:text-emerald-950 bg-white hover:bg-emerald-100 border border-emerald-300 rounded-md px-2 py-0.5 transition cursor-pointer shadow-2xs active:scale-95"
+                  title={`Test calculating route from ${route.label}`}
+                >
+                  ⚡ {route.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Location Input Section */}
           <LocationInput
             origin={origin}
@@ -411,6 +510,7 @@ export default function App() {
             setPinMode={setPinMode}
             userCountry={userCountry}
             onCountryDetected={handleCountryDetected}
+            onViewOnMap={handleViewLocationOnMap}
           />
 
           {/* Error Message */}
@@ -517,6 +617,7 @@ export default function App() {
             mobileTab={mobileTab}
             currency={currency}
             onOpenSteps={() => setIsTurnByTurnOpen(true)}
+            focusLocation={focusLocation}
           />
         </section>
       </main>

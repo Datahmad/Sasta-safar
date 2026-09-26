@@ -23,6 +23,7 @@ export default function LocationInput({
   setPinMode,
   userCountry = 'pk',
   onCountryDetected,
+  onViewOnMap,
 }) {
   const [originQuery, setOriginQuery] = useState(origin?.name || '');
   const [destQuery, setDestQuery] = useState(destination?.name || '');
@@ -323,7 +324,7 @@ export default function LocationInput({
                 }
               }}
               onChange={(e) => handleOriginChange(e.target.value)}
-              placeholder={isLocatingUser ? "Detecting GPS location..." : "Search starting city, address, or landmark..."}
+              placeholder={isLocatingUser ? "Detecting GPS location..." : "e.g. My Hostel, G-11 Islamabad, or tap Map..."}
               className="w-full bg-white hover:bg-zinc-50/50 focus:bg-white text-sm font-medium text-zinc-900 placeholder-zinc-400 pl-9 pr-8 py-2.5 rounded-lg border border-zinc-300 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 outline-none transition shadow-2xs"
             />
             {originQuery && (
@@ -342,22 +343,21 @@ export default function LocationInput({
             )}
           </div>
 
-          {/* Auto-detected GPS location pill */}
-          {origin?.isCurrentLocation && (
-            <div className="mt-1.5 flex items-center justify-between text-xs text-emerald-800 bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-lg">
-              <span className="flex items-center gap-1.5 font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                Auto-picked exact current location
+          {/* Origin selected location preview & View on Map button */}
+          {origin && origin.lat != null && (
+            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5 text-xs text-emerald-800 bg-emerald-50/90 border border-emerald-300 px-2.5 py-1.5 rounded-lg">
+              <span className="flex items-center gap-1.5 font-medium truncate max-w-[270px]">
+                <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0"></span>
+                <span className="truncate">{origin.name}</span>
               </span>
               <button
                 type="button"
-                onClick={() => {
-                  isManuallyClearedRef.current = false;
-                  handleUseCurrentLocation(false);
-                }}
-                className="underline hover:text-emerald-950 font-semibold cursor-pointer ml-1"
+                onClick={() => onViewOnMap && onViewOnMap(origin)}
+                className="shrink-0 inline-flex items-center gap-1 font-bold text-[11px] text-emerald-800 hover:text-emerald-950 bg-white hover:bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded cursor-pointer transition shadow-2xs"
+                title="Zoom into this location on map"
               >
-                Refresh GPS
+                <Compass className="w-3 h-3 text-emerald-700" />
+                <span>Open on Map</span>
               </button>
             </div>
           )}
@@ -371,47 +371,53 @@ export default function LocationInput({
                   {activeCountryInfo?.flag} {userGpsLocation?.city || activeCountryInfo?.countryName || 'Local'}
                 </span>
               </li>
-              {originSuggestions.map((item) => (
-                <li
-                  key={item.id}
-                  onClick={() => selectOrigin(item)}
-                  className="px-3.5 py-2.5 text-sm text-zinc-800 hover:bg-zinc-50 hover:text-zinc-950 cursor-pointer flex items-start justify-between space-x-2 transition font-medium"
-                >
-                  <div className="flex items-start space-x-2.5 flex-1 min-w-0">
-                    <MapPin
-                      className={`w-4 h-4 mt-0.5 shrink-0 ${
-                        item.tier === 1
-                          ? 'text-emerald-600'
-                          : item.tier === 2
-                          ? 'text-blue-600'
-                          : 'text-zinc-400'
-                      }`}
-                    />
-                    <span className="line-clamp-2">{item.displayName}</span>
-                  </div>
-                  {item.tier === 1 ? (
-                    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                      <span>In City</span>
-                      {item.distanceKm != null && (
-                        <span className="font-mono text-xs">({item.distanceKm} km)</span>
-                      )}
-                    </span>
-                  ) : item.tier === 2 ? (
-                    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
-                      <span>{item.city ? item.city : 'In-Country'}</span>
-                      {item.distanceKm != null && (
-                        <span className="font-mono text-[10px] text-blue-500">
-                          ({item.distanceKm} km)
-                        </span>
-                      )}
-                    </span>
-                  ) : (
-                    <span className="shrink-0 px-1.5 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-600 border border-zinc-200">
-                      {item.country || 'Global'}
-                    </span>
-                  )}
-                </li>
-              ))}
+              {originSuggestions.map((item) => {
+                const parts = (item.displayName || '').split(',');
+                const mainName = parts[0]?.trim() || item.displayName;
+                const subDetails = parts.slice(1, 4).join(',')?.trim();
+
+                return (
+                  <li
+                    key={item.id}
+                    onClick={() => selectOrigin(item)}
+                    className="px-3.5 py-2.5 text-xs text-zinc-800 hover:bg-zinc-50 hover:text-zinc-950 cursor-pointer flex items-start justify-between space-x-2 transition font-medium"
+                  >
+                    <div className="flex items-start space-x-2.5 flex-1 min-w-0">
+                      <MapPin
+                        className={`w-4 h-4 mt-0.5 shrink-0 ${
+                          item.tier === 1
+                            ? 'text-emerald-600'
+                            : item.tier === 2
+                            ? 'text-blue-600'
+                            : 'text-zinc-400'
+                        }`}
+                      />
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-semibold text-zinc-900 text-xs truncate">{mainName}</span>
+                        {subDetails && (
+                          <span className="text-[11px] text-zinc-500 truncate">{subDetails}</span>
+                        )}
+                      </div>
+                    </div>
+                    {item.tier === 1 ? (
+                      <span className="shrink-0 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                        <span>In-City</span>
+                        {item.distanceKm != null && (
+                          <span className="font-mono text-[10px]">({item.distanceKm} km)</span>
+                        )}
+                      </span>
+                    ) : item.tier === 2 ? (
+                      <span className="shrink-0 px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                        <span>{item.city ? item.city : 'In-Country'}</span>
+                      </span>
+                    ) : (
+                      <span className="shrink-0 px-1.5 py-0.5 rounded text-[11px] font-medium bg-zinc-100 text-zinc-600 border border-zinc-200">
+                        {item.country || 'Global'}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -444,7 +450,7 @@ export default function LocationInput({
               type="text"
               value={destQuery}
               onChange={(e) => handleDestChange(e.target.value)}
-              placeholder="Search destination city, street, or landmark..."
+              placeholder="e.g. Sitara Park City, Faisalabad, or Hostel..."
               className="w-full bg-white hover:bg-zinc-50/50 focus:bg-white text-sm font-medium text-zinc-900 placeholder-zinc-400 pl-9 pr-8 py-2.5 rounded-lg border border-zinc-300 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 outline-none transition shadow-2xs"
             />
             {destQuery && (
@@ -462,6 +468,25 @@ export default function LocationInput({
             )}
           </div>
 
+          {/* Destination selected location preview & View on Map button */}
+          {destination && destination.lat != null && (
+            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5 text-xs text-rose-800 bg-rose-50/90 border border-rose-300 px-2.5 py-1.5 rounded-lg">
+              <span className="flex items-center gap-1.5 font-medium truncate max-w-[270px]">
+                <span className="w-2 h-2 rounded-full bg-rose-600 shrink-0"></span>
+                <span className="truncate">{destination.name}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => onViewOnMap && onViewOnMap(destination)}
+                className="shrink-0 inline-flex items-center gap-1 font-bold text-[11px] text-rose-800 hover:text-rose-950 bg-white hover:bg-rose-100 border border-rose-300 px-2 py-0.5 rounded cursor-pointer transition shadow-2xs"
+                title="Zoom into this location on map"
+              >
+                <Compass className="w-3 h-3 text-rose-700" />
+                <span>Open on Map</span>
+              </button>
+            </div>
+          )}
+
           {/* Destination Suggestions Dropdown with 3-Tier Hierarchy */}
           {destSuggestions.length > 0 && (
             <ul className="absolute left-0 right-0 mt-1.5 bg-white border border-zinc-300 rounded-xl shadow-xl z-[100] max-h-64 overflow-y-auto divide-y divide-zinc-100">
@@ -472,42 +497,53 @@ export default function LocationInput({
                   {origin?.city || userGpsLocation?.city || activeCountryInfo?.countryName || 'Local'}
                 </span>
               </li>
-              {destSuggestions.map((item) => (
-                <li
-                  key={item.id}
-                  onClick={() => selectDestination(item)}
-                  className="px-3.5 py-2.5 text-sm text-zinc-800 hover:bg-zinc-50 hover:text-zinc-950 cursor-pointer flex items-start justify-between space-x-2 transition font-medium"
-                >
-                  <div className="flex items-start space-x-2.5 flex-1 min-w-0">
-                    <Flag
-                      className={`w-4 h-4 mt-0.5 shrink-0 ${
-                        item.tier === 1
-                          ? 'text-rose-600'
-                          : item.tier === 2
-                          ? 'text-blue-600'
-                          : 'text-zinc-400'
-                      }`}
-                    />
-                    <span className="line-clamp-2">{item.displayName}</span>
-                  </div>
-                  {item.tier === 1 ? (
-                    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-zinc-100 text-zinc-900 border border-zinc-300 flex items-center gap-1">
-                      <span>In-City</span>
-                      {item.distanceKm != null && (
-                        <span className="font-mono text-zinc-600">({item.distanceKm} km)</span>
-                      )}
-                    </span>
-                  ) : item.tier === 2 ? (
-                    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
-                      <span>{item.city ? item.city : 'In-Country'}</span>
-                    </span>
-                  ) : (
-                    <span className="shrink-0 px-1.5 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-600 border border-zinc-200">
-                      {item.country || 'Global'}
-                    </span>
-                  )}
-                </li>
-              ))}
+              {destSuggestions.map((item) => {
+                const parts = (item.displayName || '').split(',');
+                const mainName = parts[0]?.trim() || item.displayName;
+                const subDetails = parts.slice(1, 4).join(',')?.trim();
+
+                return (
+                  <li
+                    key={item.id}
+                    onClick={() => selectDestination(item)}
+                    className="px-3.5 py-2.5 text-xs text-zinc-800 hover:bg-zinc-50 hover:text-zinc-950 cursor-pointer flex items-start justify-between space-x-2 transition font-medium"
+                  >
+                    <div className="flex items-start space-x-2.5 flex-1 min-w-0">
+                      <Flag
+                        className={`w-4 h-4 mt-0.5 shrink-0 ${
+                          item.tier === 1
+                            ? 'text-rose-600'
+                            : item.tier === 2
+                            ? 'text-blue-600'
+                            : 'text-zinc-400'
+                        }`}
+                      />
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-semibold text-zinc-900 text-xs truncate">{mainName}</span>
+                        {subDetails && (
+                          <span className="text-[11px] text-zinc-500 truncate">{subDetails}</span>
+                        )}
+                      </div>
+                    </div>
+                    {item.tier === 1 ? (
+                      <span className="shrink-0 px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-900 border border-zinc-300 flex items-center gap-1">
+                        <span>In-City</span>
+                        {item.distanceKm != null && (
+                          <span className="font-mono text-[10px]">({item.distanceKm} km)</span>
+                        )}
+                      </span>
+                    ) : item.tier === 2 ? (
+                      <span className="shrink-0 px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                        <span>{item.city ? item.city : 'In-Country'}</span>
+                      </span>
+                    ) : (
+                      <span className="shrink-0 px-1.5 py-0.5 rounded text-[11px] font-medium bg-zinc-100 text-zinc-600 border border-zinc-200">
+                        {item.country || 'Global'}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
