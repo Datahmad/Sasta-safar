@@ -32,6 +32,17 @@ const FALLBACK_SEED_USERS = [
     defaultCurrency: "Rs",
     defaultFuelAverage: 14,
     createdAt: "2026-09-25T19:54:09.304Z"
+  },
+  {
+    id: "usr_test_1790432376554",
+    name: "Test User",
+    email: "test@gmail.com",
+    phone: "0000000000",
+    password: "ba0ef9a2e9307c633085971014ef6e8b:329f3227dbac4d00393cead6787fe443f12682bf34627b16628d5d062fc18b12446ed6190ccc7ed20c727a51c042eeb42f26a6e5f46aa7f0ab6843421039a3f4",
+    isVerified: true,
+    defaultCurrency: "Rs",
+    defaultFuelAverage: 14,
+    createdAt: "2026-09-26T14:19:36.554Z"
   }
 ];
 
