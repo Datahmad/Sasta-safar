@@ -10,14 +10,11 @@ const connectDB = async () => {
   }
 
   const uri = process.env.MONGODB_URI;
+  const ATLAS_URI =
+    'mongodb+srv://sastasafar:Aszx1209@cluster0.ad6caa1.mongodb.net/fuel_route_planner?retryWrites=true&w=majority&appName=Cluster0';
 
-  // On Vercel / serverless, don't attempt to connect to localhost 127.0.0.1 (it doesn't exist)
-  if (process.env.VERCEL && (!uri || uri.includes('127.0.0.1') || uri.includes('localhost'))) {
-    isConnected = false;
-    return null;
-  }
-
-  const finalUri = uri || 'mongodb://127.0.0.1:27017/fuel_route_planner';
+  const finalUri =
+    uri && !uri.includes('127.0.0.1') && !uri.includes('localhost') ? uri : ATLAS_URI;
 
   if (connectionPromise) {
     try {
@@ -29,7 +26,7 @@ const connectDB = async () => {
 
   try {
     connectionPromise = mongoose.connect(finalUri, {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 10000,
       bufferCommands: false,
     });
     const conn = await connectionPromise;
