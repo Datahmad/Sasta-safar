@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { connectDB, getStatus } = require('./config/db');
+const { syncSeedUsersToMongo } = require('./utils/userStore');
 
 const geocodeRoutes = require('./routes/geocode');
 const routeRoutes = require('./routes/route');
@@ -46,7 +47,8 @@ app.use('/api/trips', tripRoutes);
 app.use('/api/fuel-rates', fuelRatesRoutes);
 
 // Health & System status
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  await connectDB();
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -54,8 +56,6 @@ app.get('/api/health', (req, res) => {
     app: 'Sasta Safar - Smart Route & Fuel Cost Calculator API',
   });
 });
-
-const { syncSeedUsersToMongo } = require('./utils/userStore');
 
 // Start DB & Server if running standalone
 if (require.main === module || !process.env.VERCEL) {
