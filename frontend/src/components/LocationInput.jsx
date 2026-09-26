@@ -142,8 +142,8 @@ export default function LocationInput({
     setDestQuery(tempQuery);
   };
 
-  // Fallback to IP geolocation — sets origin location so user always has a starting point
-  const applyFallbackLocation = async () => {
+  // Fetch location from IP — always works, instant result
+  const fetchAndApplyIpLocation = async () => {
     try {
       const ipData = await fetchIpLocation();
       if (ipData && ipData.lat && ipData.lon) {
@@ -162,21 +162,19 @@ export default function LocationInput({
           };
           setOrigin(loc);
           setOriginQuery(loc.name);
+          if (onViewOnMap) onViewOnMap(loc);
         }
+        return true;
       }
     } catch (e) {
-      console.warn('IP fallback notice:', e);
+      console.warn('IP location notice:', e);
     }
+    return false;
   };
 
-  // Auto-detect current location seamlessly
-  const handleUseCurrentLocation = async (isAutoInit = false) => {
-    if (!navigator.geolocation) {
-      if (isAutoInit) applyFallbackLocation();
-      return;
-    }
-
-    setIsLocatingUser(true);
+  // Try browser geolocation to upgrade/replace IP location with precise coords
+  const tryBrowserGeolocation = () => {
+    if (!navigator.geolocation) return;
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -187,13 +185,7 @@ export default function LocationInput({
           const cityName = rev?.city || null;
           const countryCode = rev?.countryCode || 'pk';
 
-          const gpsObj = {
-            lat: latitude,
-            lon: longitude,
-            city: cityName,
-            countryCode,
-          };
-          setUserGpsLocation(gpsObj);
+          setUserGpsLocation({ lat: latitude, lon: longitude, city: cityName, countryCode });
 
           if (countryCode && onCountryDetected) {
             onCountryDetected(countryCode);
@@ -210,31 +202,42 @@ export default function LocationInput({
             };
             setOrigin(loc);
             setOriginQuery(loc.name);
-
-            if (onViewOnMap) {
-              onViewOnMap(loc);
-            }
+            if (onViewOnMap) onViewOnMap(loc);
           }
         } catch (err) {
           console.warn('Reverse geocode notice:', err);
-          await applyFallbackLocation();
         } finally {
           setIsLocatingUser(false);
         }
       },
-      async (err) => {
-        console.warn('Geolocation notice:', err.message);
-        await applyFallbackLocation();
+      (err) => {
+        // Browser geolocation failed — IP result already applied, just stop spinner
+        console.warn('Browser geolocation notice:', err.message);
         setIsLocatingUser(false);
       },
-      { timeout: 8000, enableHighAccuracy: false, maximumAge: 300000 }
+      { timeout: 5000, enableHighAccuracy: false, maximumAge: 300000 }
     );
+  };
+
+  // Main auto-detect handler — IP first (instant), then browser upgrade
+  const handleUseCurrentLocation = async () => {
+    setIsLocatingUser(true);
+    isManuallyClearedRef.current = false;
+
+    // Step 1: Immediately get IP location (fills in within ~1 second)
+    await fetchAndApplyIpLocation();
+
+    // Step 2: Try browser geolocation in background to upgrade to precise coords
+    tryBrowserGeolocation();
+
+    // Safety timeout — if browser geolocation hangs, stop spinner after 6s
+    setTimeout(() => setIsLocatingUser(false), 6000);
   };
 
   // Auto-fetch location on load
   useEffect(() => {
     if (!origin) {
-      handleUseCurrentLocation(true);
+      handleUseCurrentLocation();
     }
   }, []);
 
@@ -290,10 +293,7 @@ export default function LocationInput({
             </span>
             <button
               type="button"
-              onClick={() => {
-                isManuallyClearedRef.current = false;
-                handleUseCurrentLocation(false);
-              }}
+              onClick={() => handleUseCurrentLocation()}
               disabled={isLocatingUser}
               className="text-xs text-zinc-600 hover:text-zinc-950 flex items-center gap-1 font-semibold transition cursor-pointer"
             >
