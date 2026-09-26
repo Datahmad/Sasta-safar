@@ -32,6 +32,9 @@ import {
   X,
   Flag,
   RotateCcw,
+  Car,
+  Bike,
+  Truck,
 } from 'lucide-react';
 import { reverseGeocode } from '../services/api';
 
@@ -60,21 +63,112 @@ const createCustomPin = (label, colorBg, colorRing) => {
 const originIcon = createCustomPin('A', '#059669', '#10b981');
 const destinationIcon = createCustomPin('B', '#e11d48', '#f43f5e');
 
-// Create 3D Navigation Vehicle Pointer with Directional Heading & Radar Pulse
-const createVehiclePin = (heading = 0, isHeadingUp = false) => {
+// Helper to resolve avatar type from override or selected vehicle name
+export const resolveVehicleAvatar = (userOverride, vehicleName = '') => {
+  if (userOverride && userOverride !== 'auto') {
+    return userOverride; // 'arrow' | 'bike' | 'car' | 'suv' | 'truck'
+  }
+  const name = (vehicleName || '').toLowerCase();
+  if (name.includes('bike') || name.includes('motorcycle')) return 'bike';
+  if (name.includes('suv') || name.includes('4x4')) return 'suv';
+  if (name.includes('truck') || name.includes('van')) return 'truck';
+  return 'car';
+};
+
+// Top-down SVG vector rendering for each vehicle type (matching 22x22 box inside 36px badge)
+const getAvatarSvg = (avatarType = 'arrow') => {
+  switch (avatarType) {
+    case 'bike':
+      return `
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="11" y="1" width="2" height="4.5" rx="1" fill="#cbd5e1" stroke="#0f172a" stroke-width="0.7"/>
+          <path d="M6 6.5C8 5.8 16 5.8 18 6.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="5.5" cy="6.2" r="1.1" fill="#ffffff"/>
+          <circle cx="18.5" cy="6.2" r="1.1" fill="#ffffff"/>
+          <circle cx="12" cy="3" r="1.2" fill="#fef08a"/>
+          <path d="M10 7.5C10 6.5 14 6.5 14 7.5L14.5 15.5C14.5 17.5 13.5 18.5 12 18.5C10.5 18.5 9.5 17.5 9.5 15.5L10 7.5Z" fill="#ffffff"/>
+          <ellipse cx="12" cy="11.5" rx="4.2" ry="2.2" fill="#38bdf8"/>
+          <circle cx="12" cy="11" r="2.5" fill="#0f172a" stroke="#ffffff" stroke-width="0.8"/>
+          <rect x="11" y="18" width="2" height="5" rx="1" fill="#cbd5e1" stroke="#0f172a" stroke-width="0.7"/>
+        </svg>
+      `;
+    case 'car':
+      return `
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="5.2" y="4" width="2" height="4" rx="1" fill="#0f172a"/>
+          <rect x="16.8" y="4" width="2" height="4" rx="1" fill="#0f172a"/>
+          <rect x="5.2" y="16" width="2" height="4" rx="1" fill="#0f172a"/>
+          <rect x="16.8" y="16" width="2" height="4" rx="1" fill="#0f172a"/>
+          <path d="M7.5 4.5C7.5 2.8 9.5 2 12 2C14.5 2 16.5 2.8 16.5 4.5L17 19.5C17 21 15 22 12 22C9 22 7 21 7 19.5L7.5 4.5Z" fill="#ffffff" stroke="#94a3b8" stroke-width="0.5"/>
+          <ellipse cx="8.8" cy="3.2" rx="1" ry="0.6" fill="#fef08a"/>
+          <ellipse cx="15.2" cy="3.2" rx="1" ry="0.6" fill="#fef08a"/>
+          <path d="M8.8 7.5C9.8 7 14.2 7 15.2 7.5L15.6 10H8.4L8.8 7.5Z" fill="#0f172a"/>
+          <rect x="8.8" y="10.5" width="6.4" height="4" rx="1" fill="#3b82f6"/>
+          <path d="M8.6 15H15.4L15.8 17H8.2L8.6 15Z" fill="#0f172a"/>
+          <ellipse cx="8.5" cy="21.2" rx="1" ry="0.5" fill="#ef4444"/>
+          <ellipse cx="15.5" cy="21.2" rx="1" ry="0.5" fill="#ef4444"/>
+        </svg>
+      `;
+    case 'suv':
+      return `
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4.5" y="4" width="2.4" height="4.5" rx="1" fill="#0f172a"/>
+          <rect x="17.1" y="4" width="2.4" height="4.5" rx="1" fill="#0f172a"/>
+          <rect x="4.5" y="15.5" width="2.4" height="4.5" rx="1" fill="#0f172a"/>
+          <rect x="17.1" y="15.5" width="2.4" height="4.5" rx="1" fill="#0f172a"/>
+          <rect x="6.5" y="2.5" width="11" height="19" rx="3.5" fill="#ffffff" stroke="#94a3b8" stroke-width="0.5"/>
+          <rect x="7.5" y="2.8" width="2.2" height="1" rx="0.5" fill="#fef08a"/>
+          <rect x="14.3" y="2.8" width="2.2" height="1" rx="0.5" fill="#fef08a"/>
+          <path d="M8 6.5C9.2 6 14.8 6 16 6.5L16.2 9H7.8L8 6.5Z" fill="#0f172a"/>
+          <line x1="8.2" y1="9.8" x2="8.2" y2="16.5" stroke="#f59e0b" stroke-width="1.2" stroke-linecap="round"/>
+          <line x1="15.8" y1="9.8" x2="15.8" y2="16.5" stroke="#f59e0b" stroke-width="1.2" stroke-linecap="round"/>
+          <rect x="9.2" y="10.2" width="5.6" height="5.5" rx="1" fill="#0f172a" opacity="0.5"/>
+          <path d="M8.2 17.5H15.8L15.6 19.5H8.4L8.2 17.5Z" fill="#0f172a"/>
+          <ellipse cx="8.5" cy="21.2" rx="1" ry="0.5" fill="#ef4444"/>
+          <ellipse cx="15.5" cy="21.2" rx="1" ry="0.5" fill="#ef4444"/>
+        </svg>
+      `;
+    case 'truck':
+      return `
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4.8" y="4" width="2" height="4" rx="1" fill="#0f172a"/>
+          <rect x="17.2" y="4" width="2" height="4" rx="1" fill="#0f172a"/>
+          <rect x="4.6" y="15" width="2.2" height="5" rx="1" fill="#0f172a"/>
+          <rect x="17.2" y="15" width="2.2" height="5" rx="1" fill="#0f172a"/>
+          <rect x="6.8" y="2.5" width="10.4" height="7.5" rx="2" fill="#ffffff"/>
+          <path d="M7.8 4.5H16.2L16.4 6.8H7.6L7.8 4.5Z" fill="#0f172a"/>
+          <circle cx="8" cy="3" r="0.8" fill="#fef08a"/>
+          <circle cx="16" cy="3" r="0.8" fill="#fef08a"/>
+          <rect x="6.5" y="10.5" width="11" height="11.5" rx="1.5" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+          <line x1="8" y1="13.5" x2="16" y2="13.5" stroke="#94a3b8" stroke-width="0.9"/>
+          <line x1="8" y1="16.5" x2="16" y2="16.5" stroke="#94a3b8" stroke-width="0.9"/>
+          <line x1="8" y1="19.5" x2="16" y2="19.5" stroke="#94a3b8" stroke-width="0.9"/>
+        </svg>
+      `;
+    case 'arrow':
+    default:
+      return `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 19 21 12 17 5 21 12 2" fill="#ffffff" />
+        </svg>
+      `;
+  }
+};
+
+// Create 3D Navigation Vehicle Pointer with Directional Heading, Exact Blue Pointer Footprint & Custom Avatar
+const createVehiclePin = (heading = 0, isHeadingUp = false, avatarType = 'arrow') => {
   // If the map is in Heading-Up mode, the map already rotates to match vehicle heading,
-  // so the vehicle arrow inside the map points forward (0 deg = straight UP).
-  // If in North-Up mode, the arrow points to the heading angle.
+  // so the vehicle arrow/avatar inside the map points forward (0 deg = straight UP).
+  // If in North-Up mode, the vehicle points to the heading angle.
   const visualHeading = isHeadingUp ? 0 : heading;
+  const svgHtml = getAvatarSvg(avatarType);
   return L.divIcon({
     className: 'custom-vehicle-marker',
     html: `
       <div style="position: relative; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;">
         <div style="position: absolute; width: 50px; height: 50px; border-radius: 50%; background: rgba(37, 99, 235, 0.25); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
         <div style="position: relative; width: 36px; height: 36px; border-radius: 50%; background: #2563eb; border: 3px solid #ffffff; box-shadow: 0 4px 14px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; transform: rotate(${visualHeading}deg); transition: transform 0.3s ease;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 19 21 12 17 5 21 12 2" fill="#ffffff" />
-          </svg>
+          ${svgHtml}
         </div>
       </div>
     `,
@@ -111,6 +205,7 @@ function DriveModeCameraController({
   heading,
   speedKmH = 0,
   isHeadingUp = true,
+  is3DMode = true,
   userHasPanned = false,
   setUserHasPanned,
   recenterTrigger = 0,
@@ -118,12 +213,12 @@ function DriveModeCameraController({
   const map = useMap();
   const hasZoomedInRef = useRef(false);
 
-  // Invalidate size when entering drive mode or toggling rotation
+  // Invalidate size when entering drive mode or toggling rotation or 3D tilt
   useEffect(() => {
     if (map) {
       setTimeout(() => map.invalidateSize({ animate: false }), 200);
     }
-  }, [isDriveMode, isHeadingUp, map]);
+  }, [isDriveMode, isHeadingUp, is3DMode, map]);
 
   // Pause auto-follow when user touches or drags the map
   useMapEvents({
@@ -311,6 +406,7 @@ export default function MapView({
   onSaveTrip,
   isDriveMode = false,
   setIsDriveMode,
+  vehicleName = 'Sedan',
 }) {
   const defaultCenter = [40.7128, -74.006];
   const defaultZoom = 5;
@@ -337,6 +433,9 @@ export default function MapView({
   const [tripSummary, setTripSummary] = useState(null);
   const [recenterDriveTrigger, setRecenterDriveTrigger] = useState(0);
   const [isHeadingUp, setIsHeadingUp] = useState(true);
+  const [is3DMode, setIs3DMode] = useState(true);
+  const [avatarChoice, setAvatarChoice] = useState('auto'); // 'auto' | 'arrow' | 'bike' | 'car' | 'suv' | 'truck'
+  const activeAvatar = resolveVehicleAvatar(avatarChoice, vehicleName);
   const [userHasPanned, setUserHasPanned] = useState(false);
 
   // Distance & Bearing math
@@ -742,6 +841,40 @@ export default function MapView({
                   <Crosshair className="w-3 h-3" />
                   <span className="hidden sm:inline">Recenter</span>
                 </button>
+
+                {/* Avatar Quick Switcher Pill (Cycle models or switch to Blue Pointer) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAvatarChoice((prev) => {
+                      if (prev === 'auto') return 'arrow';
+                      if (prev === 'arrow') return 'bike';
+                      if (prev === 'bike') return 'car';
+                      if (prev === 'car') return 'suv';
+                      if (prev === 'suv') return 'truck';
+                      return 'auto';
+                    });
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition flex items-center gap-1.5 cursor-pointer"
+                  title="Cycle vehicle avatar (Car, Bike, SUV, Truck, Blue Arrow)"
+                >
+                  {activeAvatar === 'bike' ? (
+                    <Bike className="w-3.5 h-3.5 text-blue-400" />
+                  ) : activeAvatar === 'suv' ? (
+                    <Car className="w-3.5 h-3.5 text-teal-400" />
+                  ) : activeAvatar === 'truck' ? (
+                    <Truck className="w-3.5 h-3.5 text-amber-400" />
+                  ) : activeAvatar === 'arrow' ? (
+                    <Navigation className="w-3.5 h-3.5 text-blue-400 -rotate-45 fill-blue-400" />
+                  ) : (
+                    <Car className="w-3.5 h-3.5 text-blue-400" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {avatarChoice === 'arrow'
+                      ? 'Pointer'
+                      : activeAvatar.charAt(0).toUpperCase() + activeAvatar.slice(1)}
+                  </span>
+                </button>
               </div>
 
               {/* End Ride Button */}
@@ -775,9 +908,10 @@ export default function MapView({
         </div>
       )}
 
-      {/* Compass / Heading-Up Rotation Toggle (Google Maps Style) */}
+      {/* DRIVE MODE: Floating Top-Right Controls (Compass Needle, 3D/2D Toggle, Avatar Switcher) */}
       {activeDriveMode && (
-        <div className="absolute top-20 right-3 sm:right-4 z-30 animate-in fade-in slide-in-from-right-3 duration-300 print:hidden">
+        <div className="absolute top-20 right-3 sm:right-4 z-30 animate-in fade-in slide-in-from-right-3 duration-300 print:hidden flex flex-col items-center gap-2">
+          {/* Compass / Heading-Up Rotation Toggle (Google Maps Style) */}
           <button
             type="button"
             onClick={() => setIsHeadingUp((h) => !h)}
@@ -800,6 +934,50 @@ export default function MapView({
             </div>
             <span className="text-[8px] font-black uppercase text-zinc-600 -mt-0.5 font-mono leading-none">
               {isHeadingUp ? 'HDG' : 'N'}
+            </span>
+          </button>
+
+          {/* 3D / 2D Perspective Toggle Button (Google Maps Style) */}
+          <button
+            type="button"
+            onClick={() => setIs3DMode((v) => !v)}
+            className={`w-11 h-11 rounded-full shadow-xl border backdrop-blur-md flex flex-col items-center justify-center transition active:scale-90 cursor-pointer ${
+              is3DMode
+                ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/30'
+                : 'bg-white/95 hover:bg-white text-zinc-800 border-zinc-300'
+            }`}
+            title={is3DMode ? '3D Driving Perspective active. Tap for 2D flat view.' : '2D Flat view active. Tap for 3D driving perspective.'}
+          >
+            <span className="text-xs font-black font-mono tracking-tight leading-none">
+              {is3DMode ? '3D' : '2D'}
+            </span>
+            <span className="text-[7px] font-bold uppercase tracking-wider opacity-80 mt-0.5">
+              Tilt
+            </span>
+          </button>
+
+          {/* Vehicle Avatar Switcher: Tap to toggle between chosen vehicle avatar & classic blue pointer */}
+          <button
+            type="button"
+            onClick={() => {
+              setAvatarChoice((prev) => (prev === 'arrow' ? 'auto' : 'arrow'));
+            }}
+            className="w-11 h-11 rounded-full bg-white/95 hover:bg-white text-zinc-800 shadow-xl border border-zinc-300 backdrop-blur-md flex flex-col items-center justify-center transition active:scale-90 cursor-pointer group"
+            title={`Active avatar: ${activeAvatar} (${avatarChoice === 'arrow' ? 'Blue Pointer' : 'Vehicle Model'}). Tap to toggle Blue Pointer.`}
+          >
+            {activeAvatar === 'bike' ? (
+              <Bike className="w-4 h-4 text-blue-600" />
+            ) : activeAvatar === 'suv' ? (
+              <Car className="w-4 h-4 text-teal-600" />
+            ) : activeAvatar === 'truck' ? (
+              <Truck className="w-4 h-4 text-amber-600" />
+            ) : activeAvatar === 'arrow' ? (
+              <Navigation className="w-4 h-4 text-blue-600 -rotate-45 fill-blue-600" />
+            ) : (
+              <Car className="w-4 h-4 text-blue-600" />
+            )}
+            <span className="text-[7px] font-bold uppercase text-zinc-600 leading-none mt-0.5">
+              {avatarChoice === 'arrow' ? 'Arrow' : 'Model'}
             </span>
           </button>
         </div>
@@ -1041,65 +1219,79 @@ export default function MapView({
         </div>
       )}
 
-      {/* Map Rotation Wrapper for Smooth Heading-Up (Road Faces UP) Driving View */}
+      {/* 3D Perspective Viewport for Google Maps Style Driving View */}
       <div
-        className="w-full h-full transition-transform duration-500 ease-out origin-center overflow-hidden"
+        className="w-full h-full relative overflow-hidden"
         style={{
-          transform:
-            activeDriveMode && isHeadingUp
-              ? `rotate(${-vehicleHeading}deg) scale(1.3)`
-              : 'none',
+          perspective: activeDriveMode && is3DMode ? '700px' : 'none',
+          perspectiveOrigin: '50% 70%',
         }}
       >
-        <MapContainer
-          center={defaultCenter}
-          zoom={defaultZoom}
-          scrollWheelZoom={true}
-          className="w-full h-full"
+        <div
+          className="w-full h-full transition-transform duration-500 ease-out overflow-hidden"
+          style={{
+            transformOrigin: activeDriveMode && is3DMode ? '50% 70%' : 'center center',
+            transform:
+              activeDriveMode && is3DMode && isHeadingUp
+                ? `rotateX(48deg) rotate(${-vehicleHeading}deg) scale(1.45)`
+                : activeDriveMode && is3DMode && !isHeadingUp
+                ? `rotateX(48deg) scale(1.45)`
+                : activeDriveMode && !is3DMode && isHeadingUp
+                ? `rotate(${-vehicleHeading}deg) scale(1.3)`
+                : 'none',
+            transformStyle: 'preserve-3d',
+          }}
         >
-          {/* Fast Cached OpenStreetMap Tiles */}
-          <TileLayer
-            key={activeStyleKey}
-            attribution={activeTile.attribution}
-            url={activeTile.url}
-            subdomains={activeTile.subdomains || ['a', 'b', 'c']}
-            maxZoom={19}
-            keepBuffer={6}
-            updateWhenZooming={false}
-            updateInterval={100}
-          />
-
-          {/* Dynamic Bounds & Camera Manager */}
-          <MapBoundsUpdater
-            origin={origin}
-            destination={destination}
-            selectedRoute={selectedRoute}
-            mobileTab={mobileTab}
-            reCenterTrigger={reCenterTrigger}
-            focusLocation={focusLocation}
-            isDriveMode={activeDriveMode}
-          />
-
-          {/* Drive Mode Camera Controller: Road-level close zoom, lower-third forward perspective & auto-tracking */}
-          <DriveModeCameraController
-            isDriveMode={activeDriveMode}
-            userPos={vehiclePos}
-            heading={vehicleHeading}
-            speedKmH={speedKmH}
-            isHeadingUp={isHeadingUp}
-            userHasPanned={userHasPanned}
-            setUserHasPanned={setUserHasPanned}
-            recenterTrigger={recenterDriveTrigger}
-          />
-
-          {/* Live Drive Mode Vehicle Pointer Marker */}
-          {activeDriveMode && vehiclePos && (
-            <Marker
-              position={vehiclePos}
-              icon={createVehiclePin(vehicleHeading, isHeadingUp && activeDriveMode)}
-              zIndexOffset={1000}
+          <MapContainer
+            center={defaultCenter}
+            zoom={defaultZoom}
+            scrollWheelZoom={true}
+            className="w-full h-full"
+          >
+            {/* Fast Cached OpenStreetMap Tiles */}
+            <TileLayer
+              key={activeStyleKey}
+              attribution={activeTile.attribution}
+              url={activeTile.url}
+              subdomains={activeTile.subdomains || ['a', 'b', 'c']}
+              maxZoom={19}
+              keepBuffer={6}
+              updateWhenZooming={false}
+              updateInterval={100}
             />
-          )}
+
+            {/* Dynamic Bounds & Camera Manager */}
+            <MapBoundsUpdater
+              origin={origin}
+              destination={destination}
+              selectedRoute={selectedRoute}
+              mobileTab={mobileTab}
+              reCenterTrigger={reCenterTrigger}
+              focusLocation={focusLocation}
+              isDriveMode={activeDriveMode}
+            />
+
+            {/* Drive Mode Camera Controller: Road-level close zoom, lower-third forward perspective & auto-tracking */}
+            <DriveModeCameraController
+              isDriveMode={activeDriveMode}
+              userPos={vehiclePos}
+              heading={vehicleHeading}
+              speedKmH={speedKmH}
+              isHeadingUp={isHeadingUp}
+              is3DMode={is3DMode}
+              userHasPanned={userHasPanned}
+              setUserHasPanned={setUserHasPanned}
+              recenterTrigger={recenterDriveTrigger}
+            />
+
+            {/* Live Drive Mode Vehicle Pointer Marker */}
+            {activeDriveMode && vehiclePos && (
+              <Marker
+                position={vehiclePos}
+                icon={createVehiclePin(vehicleHeading, isHeadingUp && activeDriveMode, activeAvatar)}
+                zIndexOffset={1000}
+              />
+            )}
 
         {/* Map Click Interaction Handler */}
         <MapClickHandler
@@ -1224,6 +1416,7 @@ export default function MapView({
               );
             })}
       </MapContainer>
+        </div>
       </div>
 
       {/* Trip Completed Receipt Modal */}

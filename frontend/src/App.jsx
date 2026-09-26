@@ -629,6 +629,7 @@ export default function App() {
             fuelPrice={fuelPrice}
             setMobileTab={setMobileTab}
             onSaveTrip={handleSaveTrip}
+            vehicleName={vehicleName}
           />
         </section>
       </main>
