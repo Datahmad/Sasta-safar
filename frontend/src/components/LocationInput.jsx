@@ -172,40 +172,53 @@ export default function LocationInput({
     return false;
   };
 
-  // Try browser geolocation to upgrade/replace IP location with precise coords
+  // Try browser geolocation to upgrade/replace IP location with precise Wi-Fi coords
   const tryBrowserGeolocation = () => {
     if (!navigator.geolocation) return;
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        const { latitude, longitude } = pos.coords;
+
+        // Always set the precise coords immediately — don't wait for reverse geocode
+        const fallbackLoc = {
+          name: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+          lat: latitude,
+          lon: longitude,
+          city: null,
+          countryCode: 'pk',
+          isCurrentLocation: true,
+        };
+
+        // Set origin right away with raw coords
+        setUserGpsLocation({ lat: latitude, lon: longitude, city: null, countryCode: 'pk' });
+        setOrigin(fallbackLoc);
+        setOriginQuery(fallbackLoc.name);
+        if (onViewOnMap) onViewOnMap(fallbackLoc);
+        if (onCountryDetected) onCountryDetected('pk');
+
+        // Now try to get a nice address name in the background
         try {
-          const { latitude, longitude } = pos.coords;
           const rev = await reverseGeocode(latitude, longitude);
-
-          const cityName = rev?.city || null;
-          const countryCode = rev?.countryCode || 'pk';
-
-          setUserGpsLocation({ lat: latitude, lon: longitude, city: cityName, countryCode });
-
-          if (countryCode && onCountryDetected) {
-            onCountryDetected(countryCode);
-          }
-
-          if (!isManuallyClearedRef.current) {
+          if (rev) {
+            const cityName = rev.city || null;
+            const countryCode = rev.countryCode || 'pk';
             const loc = {
-              name: rev?.displayName || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+              name: rev.displayName || fallbackLoc.name,
               lat: latitude,
               lon: longitude,
               city: cityName,
               countryCode,
               isCurrentLocation: true,
             };
+            setUserGpsLocation({ lat: latitude, lon: longitude, city: cityName, countryCode });
             setOrigin(loc);
             setOriginQuery(loc.name);
-            if (onViewOnMap) onViewOnMap(loc);
+            if (countryCode && onCountryDetected) onCountryDetected(countryCode);
           }
         } catch (err) {
           console.warn('Reverse geocode notice:', err);
+          // Raw coords already set above — no problem
         } finally {
           setIsLocatingUser(false);
         }
@@ -215,7 +228,7 @@ export default function LocationInput({
         console.warn('Browser geolocation notice:', err.message);
         setIsLocatingUser(false);
       },
-      { timeout: 5000, enableHighAccuracy: false, maximumAge: 300000 }
+      { timeout: 10000, enableHighAccuracy: true, maximumAge: 0 }
     );
   };
 
