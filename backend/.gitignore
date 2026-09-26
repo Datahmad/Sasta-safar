@@ -3,5 +3,7 @@ node_modules/
 .env.*
 !.env.example
 data/*.json
+!data/seed_users.json
+!data/seed_activities.json
 *.log
 .DS_Store

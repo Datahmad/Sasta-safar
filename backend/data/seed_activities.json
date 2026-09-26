@@ -1,0 +1,90 @@
+[
+  {
+    "id": "act_1790369438882_8253",
+    "user": {
+      "name": "Superadmin Owner",
+      "email": "sastasafarapp@gmail.com"
+    },
+    "from": "Street 49, G-13/2, G-13, Islamabad, Zone 1, Islamabad Capital Territory, 44000, Pakistan",
+    "to": "Street 1, E-11/4, Golra Sharif, Zone 1, Islamabad Capital Territory, 44110, Pakistan",
+    "fromCoords": {
+      "lat": 33.651657099939335,
+      "lon": 72.95269775004327
+    },
+    "toCoords": {
+      "lat": 33.6984978,
+      "lon": 72.9805881
+    },
+    "distanceKm": 12.9,
+    "durationMinutes": 13,
+    "estimatedCost": null,
+    "currency": "Rs",
+    "timestamp": "2026-09-25T20:50:38.882Z"
+  },
+  {
+    "id": "act_1790369281044_qw0k",
+    "user": {
+      "name": "Superadmin Owner",
+      "email": "sastasafarapp@gmail.com"
+    },
+    "from": "Street 49, G-13/2, G-13, Islamabad, Zone 1, Islamabad Capital Territory, 44000, Pakistan",
+    "to": "Air University Islamabad, Service Road E8/E9, E-9, Islamabad, Zone 1, Islamabad Capital Territory, 44000, Pakistan",
+    "fromCoords": {
+      "lat": 33.65165710126871,
+      "lon": 72.95269774909445
+    },
+    "toCoords": {
+      "lat": 33.713944,
+      "lon": 73.025864
+    },
+    "distanceKm": 14.89,
+    "durationMinutes": 14,
+    "estimatedCost": null,
+    "currency": "Rs",
+    "timestamp": "2026-09-25T20:48:01.044Z"
+  },
+  {
+    "id": "act_1790367473644_z1y9",
+    "user": {
+      "name": "ahmed",
+      "email": "ahmedographyy@gmail.com"
+    },
+    "from": "Street 49, G-13/2, G-13, Islamabad, Zone 1, Islamabad Capital Territory, 44000, Pakistan",
+    "to": "Air University Islamabad, Service Road E8/E9, E-9, Islamabad, Zone 1, Islamabad Capital Territory, 44000, Pakistan",
+    "fromCoords": {
+      "lat": 33.65148883369249,
+      "lon": 72.95283109493266
+    },
+    "toCoords": {
+      "lat": 33.713944,
+      "lon": 73.025864
+    },
+    "distanceKm": 14.89,
+    "durationMinutes": 14,
+    "estimatedCost": null,
+    "currency": "Rs",
+    "timestamp": "2026-09-25T20:17:53.644Z"
+  },
+  {
+    "id": "act_1790366817019_1ng5",
+    "user": {
+      "name": "ahmed",
+      "email": "alto1098765@gmail.com"
+    },
+    "from": "Lahore",
+    "to": "Islamabad",
+    "fromCoords": {
+      "lat": 31.5204,
+      "lon": 74.3587
+    },
+    "toCoords": {
+      "lat": 33.6844,
+      "lon": 73.0479
+    },
+    "distanceKm": 293.35,
+    "durationMinutes": 238,
+    "estimatedCost": null,
+    "currency": "Rs",
+    "timestamp": "2026-09-25T20:06:57.019Z"
+  }
+]

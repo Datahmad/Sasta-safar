@@ -27,6 +27,8 @@ backend/.env.*
 
 # Database data & storage
 backend/data/*.json
+!backend/data/seed_users.json
+!backend/data/seed_activities.json
 !backend/data/trips.json.example
 
 # Temporary and Scratch

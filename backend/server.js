@@ -41,17 +41,23 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+const { syncSeedUsersToMongo } = require('./utils/userStore');
+
 // Start DB & Server if running standalone
 if (require.main === module || !process.env.VERCEL) {
-  connectDB().finally(() => {
-    app.listen(PORT, () => {
-      console.log(`🚀 Sasta Safar API Server running on port ${PORT}`);
-      console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
+  connectDB()
+    .then(() => syncSeedUsersToMongo())
+    .finally(() => {
+      app.listen(PORT, () => {
+        console.log(`🚀 Sasta Safar API Server running on port ${PORT}`);
+        console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
+      });
     });
-  });
 } else {
   // On serverless, initialize DB connection without blocking
-  connectDB().catch((err) => console.warn('[Serverless DB Warn]:', err.message));
+  connectDB()
+    .then(() => syncSeedUsersToMongo())
+    .catch((err) => console.warn('[Serverless DB Warn]:', err.message));
 }
 
 module.exports = app;

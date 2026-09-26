@@ -7,33 +7,103 @@ const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTI
 const DATA_DIR = isServerless ? path.join('/tmp', 'data') : path.join(__dirname, '..', 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const PENDING_FILE = path.join(DATA_DIR, 'pending_verifications.json');
+const SEED_USERS_FILE = path.join(__dirname, '..', 'data', 'seed_users.json');
+
+// Permanent embedded seed accounts to ensure original registration data is never lost
+const FALLBACK_SEED_USERS = [
+  {
+    id: "usr_1790367458711_vujiv",
+    name: "ahmed",
+    email: "ahmedographyy@gmail.com",
+    phone: "",
+    password: "b8268c8a546c5ea69fd9c22bb2940169:ac30d3822150d1dc4c37ced590307bf35e8e56b193bbe56bf1ca4752de1525abd05e84371d95a73401856157850236b32dfa6ac7a7bbca55dc46d2e454d27cec",
+    isVerified: true,
+    defaultCurrency: "Rs",
+    defaultFuelAverage: 14,
+    createdAt: "2026-09-25T20:17:38.711Z"
+  },
+  {
+    id: "usr_1790366049304_egqy9",
+    name: "ahmed",
+    email: "alto1098765@gmail.com",
+    phone: "",
+    password: "c01605a1c3030020a509581fec37429b:eaa2601e82c2d6244d01bb34a008b8cabbda7dafdf40cb218597856cd49f783882534c0bd92e3970a66f8dcff9c46b3ea18985b1061df3906d25280a27358c8c",
+    isVerified: true,
+    defaultCurrency: "Rs",
+    defaultFuelAverage: 14,
+    createdAt: "2026-09-25T19:54:09.304Z"
+  }
+];
+
+// In-memory cache for ultra-fast Lookups across serverless execution cycles
+const memoryUsers = new Map();
+const memoryPending = new Map();
+
+function loadSeedUsers() {
+  try {
+    if (fs.existsSync(SEED_USERS_FILE)) {
+      const raw = fs.readFileSync(SEED_USERS_FILE, 'utf8');
+      const parsed = JSON.parse(raw || '[]');
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.warn('[UserStore Seed File Warning]:', err.message);
+  }
+  return FALLBACK_SEED_USERS;
+}
 
 // Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (e) {}
 
-// Ensure users.json exists
-if (!fs.existsSync(USERS_FILE)) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify([], null, 2), 'utf8');
-}
+// Initialize disk users file with seed users if missing or empty
+try {
+  if (!fs.existsSync(USERS_FILE)) {
+    const seeds = loadSeedUsers();
+    fs.writeFileSync(USERS_FILE, JSON.stringify(seeds, null, 2), 'utf8');
+  }
+} catch (e) {}
 
-// Ensure pending_verifications.json exists
-if (!fs.existsSync(PENDING_FILE)) {
-  fs.writeFileSync(PENDING_FILE, JSON.stringify({}, null, 2), 'utf8');
-}
+// Populate memory cache with seed users initially
+loadSeedUsers().forEach((u) => memoryUsers.set(u.email.toLowerCase().trim(), u));
 
 /**
- * Read persistent users from JSON file
+ * Read persistent users from JSON file and merge seed users
  */
 function readLocalUsers() {
+  const mergedMap = new Map();
+
+  // First put seed users
+  loadSeedUsers().forEach((u) => mergedMap.set(u.email.toLowerCase().trim(), u));
+
+  // Merge with memory cache
+  for (const [email, user] of memoryUsers.entries()) {
+    mergedMap.set(email, user);
+  }
+
+  // Read disk file if accessible
   try {
-    const raw = fs.readFileSync(USERS_FILE, 'utf8');
-    return JSON.parse(raw || '[]');
+    if (fs.existsSync(USERS_FILE)) {
+      const raw = fs.readFileSync(USERS_FILE, 'utf8');
+      const list = JSON.parse(raw || '[]');
+      if (Array.isArray(list)) {
+        list.forEach((u) => {
+          if (u && u.email) {
+            mergedMap.set(u.email.toLowerCase().trim(), u);
+          }
+        });
+      }
+    }
   } catch (err) {
     console.error('[UserStore Read Error]:', err.message);
-    return [];
   }
+
+  return Array.from(mergedMap.values());
 }
 
 /**
@@ -51,12 +121,18 @@ function writeLocalUsers(users) {
  * Read pending verifications
  */
 function readPending() {
-  try {
-    const raw = fs.readFileSync(PENDING_FILE, 'utf8');
-    return JSON.parse(raw || '{}');
-  } catch (err) {
-    return {};
+  const merged = {};
+  for (const [email, data] of memoryPending.entries()) {
+    merged[email] = data;
   }
+  try {
+    if (fs.existsSync(PENDING_FILE)) {
+      const raw = fs.readFileSync(PENDING_FILE, 'utf8');
+      const fileData = JSON.parse(raw || '{}');
+      return { ...merged, ...fileData };
+    }
+  } catch (err) {}
+  return merged;
 }
 
 /**
@@ -66,6 +142,33 @@ function writePending(data) {
   try {
     fs.writeFileSync(PENDING_FILE, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {}
+}
+
+/**
+ * Sync seed users to MongoDB when database is connected
+ */
+async function syncSeedUsersToMongo() {
+  if (!getStatus()) return;
+  try {
+    const seeds = loadSeedUsers();
+    for (const seed of seeds) {
+      const exists = await User.findOne({ email: seed.email.toLowerCase() });
+      if (!exists) {
+        await User.create({
+          name: seed.name,
+          email: seed.email.toLowerCase(),
+          phone: seed.phone || '',
+          password: seed.password,
+          isVerified: true,
+          defaultCurrency: seed.defaultCurrency || 'Rs',
+          defaultFuelAverage: seed.defaultFuelAverage || 14,
+        });
+        console.log(`[UserStore] Synced seed user ${seed.email} to MongoDB Atlas`);
+      }
+    }
+  } catch (e) {
+    console.warn('[UserStore syncSeedUsersToMongo Warn]:', e.message);
+  }
 }
 
 /**
@@ -95,7 +198,7 @@ async function findUserByEmail(email) {
     }
   }
 
-  // Check persistent disk JSON
+  // Check persistent disk JSON & memory cache
   const users = readLocalUsers();
   const found = users.find((u) => u.email.toLowerCase() === normEmail);
   return found || null;
@@ -139,6 +242,9 @@ async function saveVerifiedUser({ name, email, phone, hashedPassword }) {
     }
   }
 
+  // Save to memory cache
+  memoryUsers.set(normEmail, userRecord);
+
   // Always save to persistent disk JSON
   const users = readLocalUsers();
   const existingIdx = users.findIndex((u) => u.email.toLowerCase() === normEmail);
@@ -166,6 +272,11 @@ async function saveVerifiedUser({ name, email, phone, hashedPassword }) {
  */
 function storePendingVerification(email, data) {
   const normEmail = email.toLowerCase().trim();
+  memoryPending.set(normEmail, {
+    ...data,
+    updatedAt: Date.now(),
+  });
+
   const pending = readPending();
   pending[normEmail] = {
     ...data,
@@ -180,6 +291,9 @@ function storePendingVerification(email, data) {
 function getPendingVerification(email) {
   if (!email) return null;
   const normEmail = email.toLowerCase().trim();
+  if (memoryPending.has(normEmail)) {
+    return memoryPending.get(normEmail);
+  }
   const pending = readPending();
   return pending[normEmail] || null;
 }
@@ -190,6 +304,7 @@ function getPendingVerification(email) {
 function clearPendingVerification(email) {
   if (!email) return;
   const normEmail = email.toLowerCase().trim();
+  memoryPending.delete(normEmail);
   const pending = readPending();
   if (pending[normEmail]) {
     delete pending[normEmail];
@@ -211,4 +326,5 @@ module.exports = {
   getPendingVerification,
   clearPendingVerification,
   getAllUsers,
+  syncSeedUsersToMongo,
 };
