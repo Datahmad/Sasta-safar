@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#059669"/>
+      <stop offset="100%" style="stop-color:#047857"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <!-- Road / Route -->
+  <path d="M128 384 L256 160 L384 384" fill="none" stroke="white" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+  <!-- Location Pin -->
+  <circle cx="256" cy="160" r="32" fill="white"/>
+  <circle cx="256" cy="160" r="14" fill="#059669"/>
+  <!-- Fuel Drop Left -->
+  <path d="M148 370 Q148 396 168 396 Q188 396 188 370 Q168 340 148 370Z" fill="white" opacity="0.85"/>
+  <!-- Fuel Drop Right -->
+  <path d="M324 370 Q324 396 344 396 Q364 396 364 370 Q344 340 324 370Z" fill="white" opacity="0.85"/>
+  <!-- SS text -->
+  <text x="256" y="460" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="52" fill="white" opacity="0.7">SASTA SAFAR</text>
+</svg>

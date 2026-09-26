@@ -2,9 +2,39 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23059669'><path d='M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z'/></svg>" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
     <title>Sasta Safar | Smart Route & Fuel Cost Calculator</title>
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Theme & Status Bar Colors -->
+    <meta name="theme-color" content="#059669" />
+    <meta name="msapplication-TileColor" content="#059669" />
+    <meta name="msapplication-navbutton-color" content="#059669" />
+
+    <!-- iOS PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Sasta Safar" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+    <!-- Windows PWA / Tiles -->
+    <meta name="msapplication-TileImage" content="/icons/icon-192.png" />
+    <meta name="application-name" content="Sasta Safar" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+
+    <!-- SEO & Social -->
+    <meta name="description" content="Sasta Safar – Pakistan's smartest route planner & fuel cost calculator. Plan cheapest journeys with real OGRA fuel rates, turn-by-turn navigation, and live route mapping." />
+    <meta name="keywords" content="sasta safar, fuel cost calculator, route planner, Pakistan, OGRA fuel rates, petrol price, diesel price" />
+    <meta property="og:title" content="Sasta Safar | Smart Route & Fuel Cost Calculator" />
+    <meta property="og:description" content="Plan your cheapest journey across Pakistan with real-time OGRA fuel rates." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/icons/icon-512.png" />
+
     <!-- Leaflet CSS -->
     <link
       rel="stylesheet"
@@ -20,5 +50,21 @@
   <body class="bg-slate-50 text-slate-900 antialiased overflow-x-hidden selection:bg-emerald-600 selection:text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker
+            .register('/sw.js')
+            .then((reg) => {
+              console.log('[SW] Registered:', reg.scope);
+              // Auto-update check every 60 seconds
+              setInterval(() => reg.update(), 60000);
+            })
+            .catch((err) => console.warn('[SW] Registration failed:', err));
+        });
+      }
+    </script>
   </body>
 </html>
