@@ -35,7 +35,6 @@ export default function LocationInput({
   const [isSearchingDest, setIsSearchingDest] = useState(false);
 
   const [isLocatingUser, setIsLocatingUser] = useState(false);
-  const [gpsError, setGpsError] = useState(null);
   const [userGpsLocation, setUserGpsLocation] = useState(null); // { lat, lon, city, countryCode }
 
   const originDebounceRef = useRef(null);
@@ -155,109 +154,72 @@ export default function LocationInput({
     }
   };
 
-  // High-accuracy Hardware GPS Geolocation
+  // Auto-detect and fetch current location seamlessly
   const handleUseCurrentLocation = async (isAutoInit = false) => {
     if (!navigator.geolocation) {
-      if (!isAutoInit) {
-        setGpsError('Geolocation is not supported by your browser.');
-      }
+      if (isAutoInit) applyFallbackLocation();
       return;
     }
 
     setIsLocatingUser(true);
-    setGpsError(null);
 
-    const onGpsSuccess = async (pos) => {
-      try {
-        const { latitude, longitude, accuracy } = pos.coords;
-        const rev = await reverseGeocode(latitude, longitude);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const rev = await reverseGeocode(latitude, longitude);
 
-        const cityName = rev?.city || null;
-        const countryCode = rev?.countryCode || 'pk';
+          const cityName = rev?.city || null;
+          const countryCode = rev?.countryCode || 'pk';
 
-        const gpsObj = {
-          lat: latitude,
-          lon: longitude,
-          city: cityName,
-          countryCode,
-        };
-        setUserGpsLocation(gpsObj);
-
-        if (countryCode && onCountryDetected) {
-          onCountryDetected(countryCode);
-        }
-
-        if (!isManuallyClearedRef.current) {
-          const loc = {
-            name: rev?.displayName || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+          const gpsObj = {
             lat: latitude,
             lon: longitude,
             city: cityName,
             countryCode,
-            isCurrentLocation: true,
-            accuracy: Math.round(accuracy || 0),
           };
-          setOrigin(loc);
-          setOriginQuery(loc.name);
-          setGpsError(null);
+          setUserGpsLocation(gpsObj);
 
-          if (onViewOnMap) {
-            onViewOnMap(loc);
+          if (countryCode && onCountryDetected) {
+            onCountryDetected(countryCode);
           }
-        }
-      } catch (err) {
-        console.error('Reverse geocode error:', err);
-        if (!isAutoInit) {
-          setGpsError('Could not resolve street address. Please type your colony or city above.');
-        }
-      } finally {
-        setIsLocatingUser(false);
-      }
-    };
 
-    // Stage 1: Try High-Accuracy Hardware GPS first (ideal for smartphones)
-    navigator.geolocation.getCurrentPosition(
-      onGpsSuccess,
-      (highAccErr) => {
-        console.warn('Hardware GPS unavailable on this device, trying network/Wi-Fi positioning:', highAccErr.message);
+          if (!isManuallyClearedRef.current) {
+            const loc = {
+              name: rev?.displayName || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+              lat: latitude,
+              lon: longitude,
+              city: cityName,
+              countryCode,
+              isCurrentLocation: true,
+            };
+            setOrigin(loc);
+            setOriginQuery(loc.name);
 
-        // Stage 2: Fallback to standard Wi-Fi / network geolocation (works on laptops & MacBooks)
-        navigator.geolocation.getCurrentPosition(
-          onGpsSuccess,
-          (stdErr) => {
-            setIsLocatingUser(false);
-            console.warn('Standard geolocation notice:', stdErr.message);
-
-            applyFallbackLocation();
-
-            if (!isAutoInit) {
-              if (stdErr.code === 1 || highAccErr.code === 1) {
-                setGpsError('Location permission denied. Please allow location in your browser address bar or type your colony name.');
-              } else {
-                setGpsError('Laptops and desktops lack satellite GPS chips. Please type your colony/city or drop a pin on the map.');
-              }
+            if (onViewOnMap) {
+              onViewOnMap(loc);
             }
-          },
-          { timeout: 7000, enableHighAccuracy: false, maximumAge: 60000 }
-        );
+          }
+        } catch (err) {
+          console.warn('Reverse geocode notice:', err);
+        } finally {
+          setIsLocatingUser(false);
+        }
       },
-      { timeout: 6000, enableHighAccuracy: true, maximumAge: 0 }
+      async (err) => {
+        setIsLocatingUser(false);
+        console.warn('Geolocation notice:', err.message);
+        applyFallbackLocation();
+      },
+      { timeout: 8000, enableHighAccuracy: false, maximumAge: 60000 }
     );
   };
 
-  // On load: Detect country for fuel prices, and check if GPS permission is already granted
+  // Auto-fetch location on load if empty
   useEffect(() => {
     applyFallbackLocation();
-
-    if (navigator.permissions && navigator.permissions.query) {
-      navigator.permissions
-        .query({ name: 'geolocation' })
-        .then((permissionStatus) => {
-          if (permissionStatus.state === 'granted' && !origin) {
-            handleUseCurrentLocation(true);
-          }
-        })
-        .catch(() => {});
+    if (!origin) {
+      handleUseCurrentLocation(true);
     }
   }, []);
 
@@ -328,7 +290,7 @@ export default function LocationInput({
               ) : (
                 <>
                   <Navigation className="w-3 h-3 text-zinc-500" />
-                  <span>Use GPS</span>
+                  <span>Auto-Detect</span>
                 </>
               )}
             </button>
@@ -346,7 +308,7 @@ export default function LocationInput({
               type="text"
               value={originQuery}
               onChange={(e) => handleOriginChange(e.target.value)}
-              placeholder={isLocatingUser ? "Acquiring hardware GPS location..." : "e.g. My Hostel, G-11 Islamabad, or tap Map..."}
+              placeholder={isLocatingUser ? "Auto-detecting your location..." : "e.g. My Hostel, G-11 Islamabad, or tap Map..."}
               className="w-full bg-white hover:bg-zinc-50/50 focus:bg-white text-sm font-medium text-zinc-900 placeholder-zinc-400 pl-9 pr-8 py-2.5 rounded-lg border border-zinc-300 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 outline-none transition shadow-2xs"
             />
             {originQuery && (
@@ -357,7 +319,6 @@ export default function LocationInput({
                   setOriginQuery('');
                   setOrigin(null);
                   setOriginSuggestions([]);
-                  setGpsError(null);
                 }}
                 className="absolute right-2.5 text-zinc-400 hover:text-zinc-700 cursor-pointer p-1"
               >
@@ -365,52 +326,6 @@ export default function LocationInput({
               </button>
             )}
           </div>
-
-          {/* GPS Error / Help Banner */}
-          {gpsError && (
-            <div className="mt-1.5 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 space-y-2 animate-fadeIn">
-              <div className="flex items-start justify-between gap-1.5">
-                <span className="leading-snug">⚠️ {gpsError}</span>
-                <button
-                  type="button"
-                  onClick={() => setGpsError(null)}
-                  className="text-amber-600 hover:text-amber-950 font-bold shrink-0 cursor-pointer p-0.5"
-                  title="Dismiss"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Quick 1-Tap Solution Buttons */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-amber-200/60">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPinMode('origin');
-                    setGpsError(null);
-                  }}
-                  className="px-2 py-1 rounded bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold text-[11px] flex items-center gap-1 cursor-pointer transition shadow-2xs"
-                >
-                  <MapPin className="w-3 h-3 text-emerald-600" />
-                  <span>Tap Here to Drop Pin A on Map</span>
-                </button>
-
-                <div className="flex items-center gap-1 text-[11px] font-medium text-amber-700">
-                  <span>or search:</span>
-                  {['Faisalabad', 'Lahore', 'Islamabad'].map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => handleOriginChange(c)}
-                      className="px-1.5 py-0.5 rounded bg-white hover:bg-amber-100 text-zinc-800 border border-amber-200 font-medium text-[10px] cursor-pointer"
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Origin selected location preview & View on Map button */}
           {origin && origin.lat != null && (
