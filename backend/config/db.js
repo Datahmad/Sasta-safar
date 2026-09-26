@@ -36,12 +36,15 @@ const connectDB = async () => {
   } catch (error) {
     isConnected = false;
     connectionPromise = null;
+    lastError = error.message;
     console.warn(`[MongoDB Notice] Could not connect to MongoDB (${error.message}).`);
-    console.warn(`[MongoDB Notice] Operating with persistent storage fallback.`);
     return null;
   }
 };
 
-const getStatus = () => Boolean(mongoose.connection && mongoose.connection.readyState === 1);
+let lastError = null;
 
-module.exports = { connectDB, getStatus };
+const getStatus = () => Boolean(mongoose.connection && mongoose.connection.readyState === 1);
+const getLastError = () => lastError;
+
+module.exports = { connectDB, getStatus, getLastError };

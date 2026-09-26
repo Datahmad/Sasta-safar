@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { connectDB, getStatus } = require('./config/db');
+const { connectDB, getStatus, getLastError } = require('./config/db');
 const { syncSeedUsersToMongo } = require('./utils/userStore');
 
 const geocodeRoutes = require('./routes/geocode');
@@ -53,6 +53,7 @@ app.get('/api/health', async (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     mongoConnected: getStatus(),
+    dbError: getLastError ? getLastError() : null,
     app: 'Sasta Safar - Smart Route & Fuel Cost Calculator API',
   });
 });
