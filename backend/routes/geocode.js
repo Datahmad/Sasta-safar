@@ -156,6 +156,52 @@ function formatPhotonItem(feature, userCountry, userLat, userLon, userCity) {
   };
 }
 
+const GOOGLE_PLACES_KEY =
+  process.env.GOOGLE_MAPS_KEY ||
+  process.env.VITE_GOOGLE_MAPS_KEY ||
+  'AIzaSyDwL8rM2V8JE7Fgt961qk7iDPFS4sMG5dE';
+
+// Helper to format Google Places v1 item into standard place item
+function formatGooglePlaceItem(place, userCountry, userLat, userLon, userCity) {
+  const lat = place.location?.latitude || 0;
+  const lon = place.location?.longitude || 0;
+  const name = place.displayName?.text || 'Location';
+  const address = place.formattedAddress || '';
+  const displayName = address && !address.toLowerCase().includes(name.toLowerCase())
+    ? `${name}, ${address}`
+    : address || name;
+  const distKm = getDistanceKm(userLat, userLon, lat, lon);
+
+  const isInCity = Boolean(
+    (userCity && displayName.toLowerCase().includes(userCity.toLowerCase())) ||
+      (distKm != null && distKm <= 40)
+  );
+
+  return {
+    id: `goog_${place.id || Math.random().toString(36).substring(2, 9)}`,
+    displayName,
+    lat: parseFloat(lat),
+    lon: parseFloat(lon),
+    type: 'establishment',
+    class: 'google',
+    importance: 1.0,
+    address: {
+      road: name,
+      city: userCity || null,
+      country: 'Pakistan',
+      country_code: 'pk',
+    },
+    city: userCity || null,
+    countryCode: 'pk',
+    country: 'Pakistan',
+    distanceKm: distKm,
+    tier: isInCity ? 1 : 2,
+    tierLabel: isInCity ? 'In-City' : 'In-Country',
+    isInCity,
+    isLocalCountry: true,
+  };
+}
+
 const MAPBOX_DEFAULT_TOKEN =
   process.env.MAPBOX_TOKEN ||
   'pk.eyJ1IjoiYWhtZWRvZ3JhcGh5eXkiLCJhIjoiY211Z2tibWlnMDE5dTJ3c2ZxYWN5d2Q4ZSJ9.bql_v51zZMwGcdLZaTngRw';
@@ -251,6 +297,36 @@ router.get('/search', async (req, res) => {
       viewboxParam = `${(userLon - deltaLon).toFixed(4)},${(userLat + deltaLat).toFixed(4)},${(userLon + deltaLon).toFixed(4)},${(userLat - deltaLat).toFixed(4)}`;
     }
 
+    // 0. Google Places (New v1 API) - Primary Tier (Deep colonies, streets, societies)
+    const googlePromise = (async () => {
+      if (!GOOGLE_PLACES_KEY) return [];
+      try {
+        const response = await axios.post(
+          'https://places.googleapis.com/v1/places:searchText',
+          {
+            textQuery: query,
+            regionCode: 'pk',
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': GOOGLE_PLACES_KEY,
+              'X-Goog-FieldMask':
+                'places.id,places.displayName,places.formattedAddress,places.location',
+            },
+            timeout: 4000,
+          }
+        );
+        return response.data?.places || [];
+      } catch (err) {
+        console.warn(
+          '[Google Places Search Warning]:',
+          err.response?.data?.error?.message || err.message
+        );
+        return [];
+      }
+    })();
+
     // 1. Mapbox Geocoding Query (Strictly within Pakistan)
     const mapboxPromise = (async () => {
       try {
@@ -311,13 +387,23 @@ router.get('/search', async (req, res) => {
       }
     })();
 
-    const [mapboxFeatures, nominatimResults, photonFeatures] = await Promise.all([
+    const [googlePlaces, mapboxFeatures, nominatimResults, photonFeatures] = await Promise.all([
+      googlePromise,
       mapboxPromise,
       nominatimPromise,
       photonPromise,
     ]);
 
-    // Process Mapbox results first (Highest commercial accuracy)
+    // Process Google Places results FIRST (Highest accuracy for Pakistani colonies)
+    googlePlaces.forEach((place) => {
+      const lat = place.location?.latitude;
+      const lon = place.location?.longitude;
+      if (lat != null && lon != null && !isNaN(lat) && !isNaN(lon) && !isDuplicate(lat, lon)) {
+        combinedResults.push(formatGooglePlaceItem(place, userCountry, userLat, userLon, userCity));
+      }
+    });
+
+    // Process Mapbox results (Second Tier)
     mapboxFeatures.forEach((feat) => {
       const [lon, lat] = feat.center || [NaN, NaN];
       if (!isNaN(lat) && !isNaN(lon) && !isDuplicate(lat, lon)) {

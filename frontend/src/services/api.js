@@ -59,6 +59,26 @@ export async function searchPlaces(query, context = {}) {
       directParams.append('bounded', '0');
     }
 
+    // Query Google Places (New v1 API) for hyper-accurate Pakistani societies & colonies
+    const GOOGLE_PLACES_KEY =
+      import.meta.env.VITE_GOOGLE_MAPS_KEY ||
+      'AIzaSyDwL8rM2V8JE7Fgt961qk7iDPFS4sMG5dE';
+
+    const googleFetch = fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_PLACES_KEY,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location',
+      },
+      body: JSON.stringify({
+        textQuery: query,
+        regionCode: 'pk',
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : { places: [] }))
+      .catch(() => ({ places: [] }));
+
     // Query Mapbox Geocoding with strict Pakistan filter
     const MAPBOX_TOKEN =
       import.meta.env.VITE_MAPBOX_TOKEN ||
@@ -84,7 +104,8 @@ export async function searchPlaces(query, context = {}) {
       .then((r) => (r.ok ? r.json() : { features: [] }))
       .catch(() => ({ features: [] }));
 
-    const [mapboxData, nominatimList, photonData] = await Promise.all([
+    const [googleData, mapboxData, nominatimList, photonData] = await Promise.all([
+      googleFetch,
       mapboxFetch,
       nominatimFetch,
       photonFetch,
@@ -98,6 +119,31 @@ export async function searchPlaces(query, context = {}) {
       seenCoordinates.add(key);
       return false;
     };
+
+    // Format Google Places results FIRST (Highest accuracy for deep colonies & internal addresses)
+    (googleData?.places || []).forEach((p) => {
+      const pLat = p.location?.latitude;
+      const pLon = p.location?.longitude;
+      if (pLat == null || pLon == null || isNaN(pLat) || isNaN(pLon) || isDuplicate(pLat, pLon)) return;
+
+      const pName = p.displayName?.text || 'Location';
+      const pAddress = p.formattedAddress || '';
+      const pDisplay = pAddress && !pAddress.toLowerCase().includes(pName.toLowerCase())
+        ? `${pName}, ${pAddress}`
+        : pAddress || pName;
+
+      results.push({
+        id: `goog_${p.id || Math.random().toString(36).substring(2, 9)}`,
+        displayName: pDisplay,
+        lat: pLat,
+        lon: pLon,
+        city: city || null,
+        tier: 1,
+        tierLabel: 'In-City',
+        importance: 1.0,
+        class: 'google',
+      });
+    });
 
     // Format Mapbox features first
     (mapboxData?.features || []).forEach((feat) => {
