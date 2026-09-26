@@ -5,6 +5,100 @@ const { logJourney } = require('../utils/activityStore');
 
 const USER_AGENT = 'SastaSafar/1.0 (contact@sastasafar.local)';
 
+const GOOGLE_ROUTES_KEY =
+  process.env.GOOGLE_MAPS_KEY ||
+  process.env.VITE_GOOGLE_MAPS_KEY ||
+  'AIzaSyDwL8rM2V8JE7Fgt961qk7iDPFS4sMG5dE';
+
+/**
+ * Decodes Google encoded polyline string into an array of [lat, lon] coordinates for Leaflet
+ */
+function decodePolyline(encoded) {
+  if (!encoded) return [];
+  const poly = [];
+  let index = 0, len = encoded.length;
+  let lat = 0, lng = 0;
+
+  while (index < len) {
+    let b, shift = 0, result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
+
+    poly.push([parseFloat((lat / 1e5).toFixed(6)), parseFloat((lng / 1e5).toFixed(6))]);
+  }
+  return poly;
+}
+
+// Helper to format Google Routes API object into clean app structure
+function formatGoogleRoute(r, index) {
+  const distanceKm = parseFloat(((r.distanceMeters || 0) / 1000).toFixed(2));
+  const durationSec = parseInt((r.duration || '0s').replace('s', ''), 10) || 0;
+  const durationMinutes = Math.max(1, Math.round(durationSec / 60));
+
+  const steps = [];
+  if (r.legs && r.legs.length > 0) {
+    r.legs.forEach((leg) => {
+      if (leg.steps) {
+        leg.steps.forEach((step) => {
+          const nav = step.navigationInstruction || {};
+          const instruction = nav.instructions || 'Continue';
+          const maneuverRaw = (nav.maneuver || 'STRAIGHT').toLowerCase();
+
+          let modifier = '';
+          if (maneuverRaw.includes('right')) modifier = 'right';
+          else if (maneuverRaw.includes('left')) modifier = 'left';
+          else if (maneuverRaw.includes('straight')) modifier = 'straight';
+
+          let type = 'turn';
+          if (maneuverRaw.includes('depart')) type = 'depart';
+          else if (maneuverRaw.includes('arrive')) type = 'arrive';
+          else if (maneuverRaw.includes('roundabout')) type = 'roundabout';
+
+          steps.push({
+            instruction,
+            type,
+            modifier,
+            name: step.description || instruction,
+            distanceMeters: Math.round(step.distanceMeters || 0),
+            durationSeconds: parseInt((step.staticDuration || '0s').replace('s', ''), 10) || 0,
+            location: step.startLocation?.latLng
+              ? [step.startLocation.latLng.latitude, step.startLocation.latLng.longitude]
+              : null,
+          });
+        });
+      }
+    });
+  }
+
+  const coordinates = decodePolyline(r.polyline?.encodedPolyline);
+
+  return {
+    id: `route-${index + 1}`,
+    rawIndex: index,
+    distanceKm,
+    durationMinutes,
+    coordinates,
+    steps,
+    summary: r.description || (steps[0]?.name ? `Via ${steps[0].name}` : `Route ${index + 1}`),
+    provider: 'google',
+  };
+}
+
 // Helper to format OSRM route object into clean app structure
 function formatOsrmRoute(r, index) {
   const distanceKm = parseFloat((r.distance / 1000).toFixed(2));
@@ -42,6 +136,7 @@ function formatOsrmRoute(r, index) {
     coordinates: latLngCoords,
     steps,
     summary: r.legs?.[0]?.summary || (steps[0]?.name ? `Via ${steps[0].name}` : `Route ${index + 1}`),
+    provider: 'osrm',
   };
 }
 
@@ -65,120 +160,123 @@ router.post('/calculate', async (req, res) => {
   const dLon = parseFloat(destination.lon);
 
   try {
-    // 1. Primary Query: Ask OSRM for driving routes with alternatives
-    const primaryUrl = `https://router.project-osrm.org/route/v1/driving/${oLon},${oLat};${dLon},${dLat}?overview=full&geometries=geojson&alternatives=3&steps=true`;
+    let rawRoutes = [];
 
-    const response = await axios.get(primaryUrl, {
-      headers: { 'User-Agent': USER_AGENT },
-      timeout: 12000,
-    });
+    // 1. Primary: Use Google Routes API for real Pakistani driving roads and alternatives
+    if (GOOGLE_ROUTES_KEY) {
+      try {
+        const googleUrl = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+        const googleRes = await axios.post(
+          googleUrl,
+          {
+            origin: { location: { latLng: { latitude: oLat, longitude: oLon } } },
+            destination: { location: { latLng: { latitude: dLat, longitude: dLon } } },
+            travelMode: 'DRIVE',
+            computeAlternativeRoutes: true,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': GOOGLE_ROUTES_KEY,
+              'X-Goog-FieldMask':
+                'routes.duration,routes.distanceMeters,routes.description,routes.polyline.encodedPolyline,routes.legs.steps',
+            },
+            timeout: 7000,
+          }
+        );
 
-    const data = response.data;
+        if (googleRes.data?.routes && googleRes.data.routes.length > 0) {
+          rawRoutes = googleRes.data.routes.map((r, i) => formatGoogleRoute(r, i));
+        }
+      } catch (gErr) {
+        console.warn('[Google Routes API Warning, falling back to OSRM]:', gErr.response?.data?.error?.message || gErr.message);
+      }
+    }
 
-    if (!data.routes || data.routes.length === 0) {
+    // 2. Fallback: If Google Routes was unavailable or empty, query OSRM
+    if (rawRoutes.length === 0) {
+      const primaryUrl = `https://router.project-osrm.org/route/v1/driving/${oLon},${oLat};${dLon},${dLat}?overview=full&geometries=geojson&alternatives=3&steps=true`;
+      const response = await axios.get(primaryUrl, {
+        headers: { 'User-Agent': USER_AGENT },
+        timeout: 10000,
+      });
+
+      if (!response.data.routes || response.data.routes.length === 0) {
+        return res.status(404).json({ error: 'No drivable route found between these locations' });
+      }
+
+      rawRoutes = response.data.routes.map((r, i) => formatOsrmRoute(r, i));
+    }
+
+    if (rawRoutes.length === 0) {
       return res.status(404).json({ error: 'No drivable route found between these locations' });
     }
 
-    let formattedRoutes = data.routes.map((r, i) => formatOsrmRoute(r, i));
+    // 3. Accurate Classification into Fastest vs Shortest based on REAL ROAD DATA
+    let fastestRoute = null;
+    let shortestRoute = null;
 
-    // Check if we have at least 2 distinct routes with different geometries
-    let isSecondRouteDistinct = false;
-    if (formattedRoutes.length > 1) {
-      const r1 = formattedRoutes[0];
-      const r2 = formattedRoutes[1];
-      const distDiff = Math.abs(r1.distanceKm - r2.distanceKm);
-      // Check if coordinate lengths or points differ
-      if (distDiff > 0.05 || r1.coordinates.length !== r2.coordinates.length) {
-        isSecondRouteDistinct = true;
-      }
-    }
-
-    // 2. If OSRM returned only 1 route (or identical duplicates), fetch a REAL alternative via intermediate road corridor
-    if (!isSecondRouteDistinct) {
-      try {
-        const midLat = (oLat + dLat) / 2;
-        const midLon = (oLon + dLon) / 2;
-        const diffLat = dLat - oLat;
-        const diffLon = dLon - oLon;
-
-        // Try two perpendicular offsets (+18% and -18%) to find an alternative corridor on the road network
-        const offsets = [
-          { lat: midLat - diffLon * 0.18, lon: midLon + diffLat * 0.18 },
-          { lat: midLat + diffLon * 0.18, lon: midLon - diffLat * 0.18 },
-        ];
-
-        for (const offset of offsets) {
-          try {
-            const altUrl = `https://router.project-osrm.org/route/v1/driving/${oLon},${oLat};${offset.lon},${offset.lat};${dLon},${dLat}?overview=full&geometries=geojson&steps=true`;
-            const altRes = await axios.get(altUrl, {
-              headers: { 'User-Agent': USER_AGENT },
-              timeout: 8000,
-            });
-
-            if (altRes.data.routes && altRes.data.routes.length > 0) {
-              const altRoute = formatOsrmRoute(altRes.data.routes[0], formattedRoutes.length);
-              // Ensure coordinates and distance are actually distinct
-              if (
-                Math.abs(altRoute.distanceKm - formattedRoutes[0].distanceKm) > 0.05 ||
-                altRoute.coordinates.length !== formattedRoutes[0].coordinates.length
-              ) {
-                formattedRoutes.push(altRoute);
-                break;
-              }
-            }
-          } catch (e) {
-            // Continue to next offset
-          }
-        }
-      } catch (err) {
-        console.warn('Waypoint offset query failed:', err.message);
-      }
-    }
-
-    // Ensure we have at least 2 routes by creating an offset road variant if network is single-lane
-    if (formattedRoutes.length === 1) {
-      const baseCoords = formattedRoutes[0].coordinates;
-      // Slight parallel road shift for visualization so the two routes are visibly distinct
-      const shiftedCoords = baseCoords.map(([lat, lon], idx) => {
-        if (idx === 0 || idx === baseCoords.length - 1) return [lat, lon];
-        const offset = Math.sin((idx / baseCoords.length) * Math.PI) * 0.0025;
-        return [lat + offset, lon + offset];
-      });
-
-      formattedRoutes.push({
-        id: 'route-2',
-        rawIndex: 1,
-        distanceKm: parseFloat((formattedRoutes[0].distanceKm * 0.94).toFixed(2)),
-        durationMinutes: Math.round(formattedRoutes[0].durationMinutes * 1.15),
-        coordinates: shiftedCoords,
-        steps: formattedRoutes[0].steps,
-        summary: 'Via local connector roads',
-      });
-    }
-
-    // 3. Classify routes into Fastest vs Shortest
-    // Route with lowest duration is Fastest
-    // Route with lowest distance is Shortest
-    const rA = formattedRoutes[0];
-    const rB = formattedRoutes[1];
-
-    let fastestRoute, shortestRoute;
-    if (rA.durationMinutes <= rB.durationMinutes) {
-      fastestRoute = { ...rA, isFastest: true, isShortest: false, label: 'Fastest Route', tag: 'fastest' };
-      shortestRoute = { ...rB, isFastest: false, isShortest: true, label: 'Shortest Route', tag: 'shortest' };
+    if (rawRoutes.length === 1) {
+      // Single route exists
+      fastestRoute = {
+        ...rawRoutes[0],
+        id: 'route-1',
+        isFastest: true,
+        isShortest: true,
+        label: 'Direct Driving Route',
+        tag: 'fastest',
+      };
+      shortestRoute = null;
     } else {
-      fastestRoute = { ...rB, isFastest: true, isShortest: false, label: 'Fastest Route', tag: 'fastest' };
-      shortestRoute = { ...rA, isFastest: false, isShortest: true, label: 'Shortest Route', tag: 'shortest' };
+      // Find fastest (lowest minutes)
+      const sortedByDuration = [...rawRoutes].sort((a, b) => a.durationMinutes - b.durationMinutes);
+      // Find shortest (lowest km)
+      const sortedByDistance = [...rawRoutes].sort((a, b) => a.distanceKm - b.distanceKm);
+
+      const fastestCandidate = sortedByDuration[0];
+      const shortestCandidate = sortedByDistance[0];
+
+      if (fastestCandidate.id === shortestCandidate.id) {
+        // One route is both faster and shorter
+        fastestRoute = {
+          ...fastestCandidate,
+          id: 'route-1',
+          isFastest: true,
+          isShortest: false,
+          label: 'Fastest & Recommended',
+          tag: 'fastest',
+        };
+        const alt = rawRoutes.find((r) => r.id !== fastestCandidate.id) || rawRoutes[1];
+        shortestRoute = {
+          ...alt,
+          id: 'route-2',
+          isFastest: false,
+          isShortest: true,
+          label: 'Alternative Route',
+          tag: 'shortest',
+        };
+      } else {
+        // Genuinely distinct fastest and shortest roads
+        fastestRoute = {
+          ...fastestCandidate,
+          id: 'route-1',
+          isFastest: true,
+          isShortest: false,
+          label: 'Fastest Route',
+          tag: 'fastest',
+        };
+        shortestRoute = {
+          ...shortestCandidate,
+          id: 'route-2',
+          isFastest: false,
+          isShortest: true,
+          label: 'Shortest Route',
+          tag: 'shortest',
+        };
+      }
     }
 
-    // If one route is both shorter in distance and time
-    if (fastestRoute.distanceKm <= shortestRoute.distanceKm) {
-      fastestRoute.label = 'Fastest Route';
-      shortestRoute.label = 'Alternative Route';
-      shortestRoute.tag = 'alt';
-    }
-
-    const processedRoutes = [fastestRoute, shortestRoute];
+    const processedRoutes = shortestRoute ? [fastestRoute, shortestRoute] : [fastestRoute];
 
     // Automatically log this journey for the Superadmin command center
     try {

@@ -433,6 +433,114 @@ export async function calculateRoutes(origin, destination, user = null) {
     console.warn('[API calculateRoutes error, attempting direct OSRM fallback]:', err);
   }
 
+  // Direct client-side Google Routes API fallback
+  const GOOGLE_KEY =
+    import.meta.env.VITE_GOOGLE_MAPS_KEY ||
+    'AIzaSyDwL8rM2V8JE7Fgt961qk7iDPFS4sMG5dE';
+
+  if (GOOGLE_KEY) {
+    try {
+      const gRes = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': GOOGLE_KEY,
+          'X-Goog-FieldMask':
+            'routes.duration,routes.distanceMeters,routes.description,routes.polyline.encodedPolyline,routes.legs.steps',
+        },
+        body: JSON.stringify({
+          origin: { location: { latLng: { latitude: Number(origin.lat), longitude: Number(origin.lon) } } },
+          destination: { location: { latLng: { latitude: Number(destination.lat), longitude: Number(destination.lon) } } },
+          travelMode: 'DRIVE',
+          computeAlternativeRoutes: true,
+        }),
+      });
+
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        if (gData.routes && gData.routes.length > 0) {
+          const decodeGooglePoly = (encoded) => {
+            if (!encoded) return [];
+            const poly = [];
+            let index = 0, len = encoded.length;
+            let lat = 0, lng = 0;
+            while (index < len) {
+              let b, shift = 0, result = 0;
+              do {
+                b = encoded.charCodeAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+              } while (b >= 0x20);
+              const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+              lat += dlat;
+              shift = 0;
+              result = 0;
+              do {
+                b = encoded.charCodeAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+              } while (b >= 0x20);
+              const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+              lng += dlng;
+              poly.push([parseFloat((lat / 1e5).toFixed(6)), parseFloat((lng / 1e5).toFixed(6))]);
+            }
+            return poly;
+          };
+
+          const rawGoogle = gData.routes.map((r, i) => {
+            const distKm = parseFloat(((r.distanceMeters || 0) / 1000).toFixed(2));
+            const durSec = parseInt((r.duration || '0s').replace('s', ''), 10) || 0;
+            const durMin = Math.max(1, Math.round(durSec / 60));
+            const coords = decodeGooglePoly(r.polyline?.encodedPolyline);
+            const steps = (r.legs?.[0]?.steps || []).map((s) => ({
+              instruction: s.navigationInstruction?.instructions || 'Continue',
+              type: 'turn',
+              modifier: '',
+              name: s.description || 'Road',
+              distanceMeters: Math.round(s.distanceMeters || 0),
+              durationSeconds: parseInt((s.staticDuration || '0s').replace('s', ''), 10) || 0,
+            }));
+
+            return {
+              id: `route-${i + 1}`,
+              distanceKm: distKm,
+              durationMinutes: durMin,
+              coordinates: coords,
+              steps,
+              summary: r.description || `Route ${i + 1}`,
+              provider: 'google',
+            };
+          });
+
+          // Accurate Fastest vs Shortest classification
+          const byDur = [...rawGoogle].sort((a, b) => a.durationMinutes - b.durationMinutes);
+          const byDist = [...rawGoogle].sort((a, b) => a.distanceKm - b.distanceKm);
+
+          let fastest = { ...byDur[0], isFastest: true, isShortest: false, label: 'Fastest Route', tag: 'fastest' };
+          let shortest = null;
+
+          if (rawGoogle.length > 1) {
+            if (byDur[0].id === byDist[0].id) {
+              fastest.label = 'Fastest & Recommended';
+              const alt = rawGoogle.find((r) => r.id !== byDur[0].id) || rawGoogle[1];
+              shortest = { ...alt, isFastest: false, isShortest: true, label: 'Alternative Route', tag: 'shortest' };
+            } else {
+              shortest = { ...byDist[0], isFastest: false, isShortest: true, label: 'Shortest Route', tag: 'shortest' };
+            }
+          }
+
+          return {
+            origin,
+            destination,
+            routes: shortest ? [fastest, shortest] : [fastest],
+          };
+        }
+      }
+    } catch (gErr) {
+      console.warn('[Direct Google Routes error, falling back to OSRM]:', gErr);
+    }
+  }
+
   // Direct client-side OSRM fallback
   const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${origin.lon},${origin.lat};${destination.lon},${destination.lat}?overview=full&geometries=geojson&alternatives=true&steps=true`;
   const osrmRes = await fetch(osrmUrl);
@@ -471,28 +579,7 @@ export async function calculateRoutes(origin, destination, user = null) {
     };
   });
 
-  if (formattedRoutes.length === 1) {
-    const baseCoords = formattedRoutes[0].coordinates;
-    const shiftedCoords = baseCoords.map(([lat, lon], idx) => {
-      if (idx === 0 || idx === baseCoords.length - 1) return [lat, lon];
-      const offset = Math.sin((idx / baseCoords.length) * Math.PI) * 0.003;
-      return [lat + offset, lon + offset];
-    });
-
-    formattedRoutes.push({
-      id: 'route-2',
-      label: 'Shortest Route (Local Roads)',
-      tag: 'shortest',
-      isFastest: false,
-      isShortest: true,
-      distanceKm: parseFloat((formattedRoutes[0].distanceKm * 0.94).toFixed(2)),
-      durationMinutes: Math.round(formattedRoutes[0].durationMinutes * 1.15),
-      coordinates: shiftedCoords,
-      steps: formattedRoutes[0].steps,
-      summary: 'Via local connector roads',
-    });
-  } else {
-    // Tag shortest by lowest km
+  if (formattedRoutes.length > 1) {
     const sorted = [...formattedRoutes].sort((a, b) => a.distanceKm - b.distanceKm);
     const shortestId = sorted[0].id;
     formattedRoutes.forEach((r) => {
