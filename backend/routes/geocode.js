@@ -29,16 +29,19 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
 // Extract city/town name from Nominatim address object
 function extractCity(address) {
   if (!address) return null;
-  return (
+  const raw =
     address.city ||
     address.town ||
     address.municipality ||
-    address.village ||
     address.suburb ||
+    address.village ||
     address.county ||
     address.state_district ||
-    null
-  );
+    null;
+  if (!raw) return null;
+  return raw
+    .replace(/\s+(City\s+Tehsil|Tehsil\s+City|Tehsil|District|Division|Cantonment|Cantt)\b/gi, '')
+    .trim();
 }
 
 // Helper to format and categorize Nominatim item into 3 Tiers:
@@ -493,26 +496,83 @@ router.get('/search', async (req, res) => {
   }
 });
 
-// Reverse geocode from map click coordinates
+// Reverse geocode from map click or GPS coordinates
 router.get('/reverse', async (req, res) => {
   const { lat, lon } = req.query;
   if (!lat || !lon) {
     return res.status(400).json({ error: 'Latitude and Longitude are required' });
   }
 
+  const numLat = parseFloat(lat);
+  const numLon = parseFloat(lon);
+
+  // 1. Primary: Mapbox Reverse Geocoding (fast, pinpoint accurate, clean English names)
+  if (MAPBOX_DEFAULT_TOKEN) {
+    try {
+      const mbRes = await axios.get(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${numLon},${numLat}.json`,
+        {
+          params: {
+            access_token: MAPBOX_DEFAULT_TOKEN,
+            language: 'en',
+            limit: 3,
+          },
+          timeout: 4000,
+        }
+      );
+
+      const features = mbRes.data?.features || [];
+      if (features.length > 0) {
+        const top = features[0];
+        let city = null;
+        let countryCode = 'pk';
+        let country = 'Pakistan';
+
+        const placeCtx =
+          features.find((f) => f.place_type?.includes('place')) ||
+          top.context?.find((c) => c.id?.startsWith('place') || c.id?.startsWith('district'));
+        if (placeCtx) {
+          city = placeCtx.text_en || placeCtx.text || null;
+        }
+
+        const countryCtx = top.context?.find((c) => c.id?.startsWith('country'));
+        if (countryCtx) {
+          countryCode = countryCtx.short_code?.toLowerCase() || 'pk';
+          country = countryCtx.text_en || countryCtx.text || 'Pakistan';
+        }
+
+        const displayName = top.place_name_en || top.place_name || top.text;
+
+        return res.json({
+          displayName,
+          lat: numLat,
+          lon: numLon,
+          city: city || (top.place_type?.includes('place') ? top.text : null),
+          countryCode,
+          country,
+          source: 'mapbox',
+        });
+      }
+    } catch (mbErr) {
+      console.warn('[Mapbox Reverse Geocode notice, falling back to Nominatim]:', mbErr.message);
+    }
+  }
+
+  // 2. Secondary: Nominatim Reverse Geocoding with English forced
   try {
     const response = await axios.get('https://nominatim.openstreetmap.org/reverse', {
       params: {
-        lat,
-        lon,
+        lat: numLat,
+        lon: numLon,
         format: 'json',
         addressdetails: 1,
+        'accept-language': 'en',
       },
       headers: {
         'User-Agent': USER_AGENT,
         'Accept-Language': 'en',
       },
-      timeout: 8000,
+      timeout: 6000,
     });
 
     const item = response.data;
@@ -520,21 +580,22 @@ router.get('/reverse', async (req, res) => {
     const country = item.address?.country || null;
     const city = extractCity(item.address);
 
-    res.json({
-      displayName: item.display_name || `${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}`,
-      lat: parseFloat(item.lat),
-      lon: parseFloat(item.lon),
+    return res.json({
+      displayName: item.display_name || `${numLat.toFixed(4)}, ${numLon.toFixed(4)}`,
+      lat: numLat,
+      lon: numLon,
       address: item.address,
       countryCode,
       country,
       city,
+      source: 'nominatim',
     });
   } catch (err) {
     console.error('[Geocode Reverse Error]:', err.message);
-    res.json({
-      displayName: `${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}`,
-      lat: parseFloat(lat),
-      lon: parseFloat(lon),
+    return res.json({
+      displayName: `${numLat.toFixed(4)}, ${numLon.toFixed(4)}`,
+      lat: numLat,
+      lon: numLon,
       countryCode: null,
       country: null,
       city: null,

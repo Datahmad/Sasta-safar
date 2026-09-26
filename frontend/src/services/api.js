@@ -382,16 +382,70 @@ export async function reverseGeocode(lat, lon) {
     console.warn('[API reverseGeocode proxy error, attempting direct fallback]:', err);
   }
 
-  // Direct fallback
+  // Direct Mapbox Reverse Geocode Fallback
+  const MAPBOX_TOKEN =
+    import.meta.env.VITE_MAPBOX_TOKEN ||
+    'pk.eyJ1IjoiYWhtZWRvZ3JhcGh5eXkiLCJhIjoiY211Z2tibWlnMDE5dTJ3c2ZxYWN5d2Q4ZSJ9.bql_v51zZMwGcdLZaTngRw';
+
+  if (MAPBOX_TOKEN) {
+    try {
+      const mbRes = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${lon},${lat}.json?access_token=${MAPBOX_TOKEN}&language=en&limit=3`
+      );
+      if (mbRes.ok) {
+        const mbData = await mbRes.json();
+        const features = mbData.features || [];
+        if (features.length > 0) {
+          const top = features[0];
+          let city = null;
+          let countryCode = 'pk';
+          let country = 'Pakistan';
+
+          const placeCtx =
+            features.find((f) => f.place_type?.includes('place')) ||
+            top.context?.find((c) => c.id?.startsWith('place') || c.id?.startsWith('district'));
+          if (placeCtx) {
+            city = placeCtx.text_en || placeCtx.text || null;
+          }
+
+          const countryCtx = top.context?.find((c) => c.id?.startsWith('country'));
+          if (countryCtx) {
+            countryCode = countryCtx.short_code?.toLowerCase() || 'pk';
+            country = countryCtx.text_en || countryCtx.text || 'Pakistan';
+          }
+
+          return {
+            displayName: top.place_name_en || top.place_name || top.text,
+            lat: parseFloat(lat),
+            lon: parseFloat(lon),
+            city: city || (top.place_type?.includes('place') ? top.text : null),
+            countryCode,
+            country,
+          };
+        }
+      }
+    } catch (mbErr) {
+      console.warn('[Direct Mapbox reverse geocode notice]:', mbErr);
+    }
+  }
+
+  // Direct Nominatim Fallback with forced English
   try {
     const directRes = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&accept-language=en`
     );
     if (directRes.ok) {
       const item = await directRes.json();
-      const city = item.address?.city || item.address?.town || item.address?.village || null;
+      const rawCity =
+        item.address?.city ||
+        item.address?.town ||
+        item.address?.municipality ||
+        item.address?.suburb ||
+        item.address?.village ||
+        null;
+      const city = rawCity ? rawCity.replace(/\s+(City\s+Tehsil|Tehsil\s+City|Tehsil|District)\b/gi, '').trim() : null;
       return {
-        displayName: item.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+        displayName: item.display_name || `${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}`,
         lat: parseFloat(item.lat),
         lon: parseFloat(item.lon),
         address: item.address,
@@ -405,9 +459,9 @@ export async function reverseGeocode(lat, lon) {
   }
 
   return {
-    displayName: `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
-    lat,
-    lon,
+    displayName: `${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}`,
+    lat: parseFloat(lat),
+    lon: parseFloat(lon),
     address: null,
     countryCode: null,
     country: null,

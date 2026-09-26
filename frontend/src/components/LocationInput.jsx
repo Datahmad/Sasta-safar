@@ -35,6 +35,7 @@ export default function LocationInput({
   const [isSearchingDest, setIsSearchingDest] = useState(false);
 
   const [isLocatingUser, setIsLocatingUser] = useState(false);
+  const [gpsError, setGpsError] = useState(null);
   const [userGpsLocation, setUserGpsLocation] = useState(null); // { lat, lon, city, countryCode }
 
   const originDebounceRef = useRef(null);
@@ -142,50 +143,38 @@ export default function LocationInput({
     setDestQuery(tempQuery);
   };
 
-  // Fallback to IP geolocation
+  // Silently detect country for currency/fuel without overriding the user's origin
   const applyFallbackLocation = async () => {
     try {
       const ipData = await fetchIpLocation();
-      if (ipData && ipData.lat && ipData.lon) {
-        setUserGpsLocation(ipData);
-        if (ipData.countryCode && onCountryDetected) {
-          onCountryDetected(ipData.countryCode);
-        }
-        if (!isManuallyClearedRef.current) {
-          const loc = {
-            name: ipData.city ? `${ipData.city}, ${ipData.countryName || 'Current Location'}` : 'Current Location',
-            lat: ipData.lat,
-            lon: ipData.lon,
-            city: ipData.city,
-            countryCode: ipData.countryCode,
-            isCurrentLocation: true,
-          };
-          setOrigin(loc);
-          setOriginQuery(loc.name);
-        }
+      if (ipData && ipData.countryCode && onCountryDetected) {
+        onCountryDetected(ipData.countryCode);
       }
     } catch (e) {
-      console.warn('IP fallback failed:', e);
+      console.warn('IP country detection notice:', e);
     }
   };
 
-  // Use GPS Current Location
+  // High-accuracy Hardware GPS Geolocation
   const handleUseCurrentLocation = async (isAutoInit = false) => {
     if (!navigator.geolocation) {
-      if (isAutoInit) applyFallbackLocation();
+      if (!isAutoInit) {
+        setGpsError('Geolocation is not supported by your browser.');
+      }
       return;
     }
 
     setIsLocatingUser(true);
+    setGpsError(null);
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          const { latitude, longitude } = pos.coords;
+          const { latitude, longitude, accuracy } = pos.coords;
           const rev = await reverseGeocode(latitude, longitude);
 
-          const cityName = rev?.city || rev?.address?.city || rev?.address?.town || null;
-          const countryCode = rev?.address?.country_code || null;
+          const cityName = rev?.city || null;
+          const countryCode = rev?.countryCode || 'pk';
 
           const gpsObj = {
             lat: latitude,
@@ -201,38 +190,69 @@ export default function LocationInput({
 
           if (!isManuallyClearedRef.current) {
             const loc = {
-              name: rev?.displayName || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+              name: rev?.displayName || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
               lat: latitude,
               lon: longitude,
               city: cityName,
               countryCode,
               isCurrentLocation: true,
+              accuracy: Math.round(accuracy || 0),
             };
             setOrigin(loc);
             setOriginQuery(loc.name);
+            setGpsError(null);
+
+            if (onViewOnMap) {
+              onViewOnMap(loc);
+            }
           }
         } catch (err) {
           console.error('Reverse geocode error:', err);
-          await applyFallbackLocation();
+          if (!isAutoInit) {
+            setGpsError('Could not resolve your street address. Please type your colony or city above.');
+          }
         } finally {
           setIsLocatingUser(false);
         }
       },
       async (err) => {
-        console.warn('HTML5 Geolocation notice (using IP/city fallback):', err.message);
-        await applyFallbackLocation();
         setIsLocatingUser(false);
+        console.warn('Hardware GPS notice:', err.message);
+
+        // Keep currency/country up to date
+        applyFallbackLocation();
+
+        if (!isAutoInit) {
+          if (err.code === 1) {
+            setGpsError('Location permission denied. Please allow location access in your browser or type your pickup location.');
+          } else if (err.code === 2) {
+            setGpsError('GPS hardware signal unavailable. Please type your colony/city or drop a pin on the map.');
+          } else if (err.code === 3) {
+            setGpsError('GPS request timed out. Please tap "Use GPS" again or type your pickup location.');
+          } else {
+            setGpsError('Could not get accurate GPS fix. Please type your colony or city.');
+          }
+        }
       },
-      { timeout: 5000, enableHighAccuracy: false, maximumAge: 300000 }
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
     );
   };
 
-  // Auto pick starting location immediately on load if empty
+  // On load: Detect country for fuel prices, and check if GPS permission is already granted
   useEffect(() => {
-    if (!origin) {
-      handleUseCurrentLocation(true);
+    applyFallbackLocation();
+
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions
+        .query({ name: 'geolocation' })
+        .then((permissionStatus) => {
+          if (permissionStatus.state === 'granted' && !origin) {
+            handleUseCurrentLocation(true);
+          }
+        })
+        .catch(() => {});
     }
-  }, [origin]);
+  }, []);
 
   const isReady = origin && destination && origin.lat && destination.lat;
 
@@ -318,13 +338,8 @@ export default function LocationInput({
             <input
               type="text"
               value={originQuery}
-              onFocus={() => {
-                if (!origin && !originQuery && !isLocatingUser && !isManuallyClearedRef.current) {
-                  handleUseCurrentLocation(false);
-                }
-              }}
               onChange={(e) => handleOriginChange(e.target.value)}
-              placeholder={isLocatingUser ? "Detecting GPS location..." : "e.g. My Hostel, G-11 Islamabad, or tap Map..."}
+              placeholder={isLocatingUser ? "Acquiring hardware GPS location..." : "e.g. My Hostel, G-11 Islamabad, or tap Map..."}
               className="w-full bg-white hover:bg-zinc-50/50 focus:bg-white text-sm font-medium text-zinc-900 placeholder-zinc-400 pl-9 pr-8 py-2.5 rounded-lg border border-zinc-300 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 outline-none transition shadow-2xs"
             />
             {originQuery && (
@@ -335,6 +350,7 @@ export default function LocationInput({
                   setOriginQuery('');
                   setOrigin(null);
                   setOriginSuggestions([]);
+                  setGpsError(null);
                 }}
                 className="absolute right-2.5 text-zinc-400 hover:text-zinc-700 cursor-pointer p-1"
               >
@@ -342,6 +358,21 @@ export default function LocationInput({
               </button>
             )}
           </div>
+
+          {/* GPS Error / Help Banner */}
+          {gpsError && (
+            <div className="mt-1.5 p-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start justify-between gap-1.5 animate-fadeIn">
+              <span className="leading-snug">⚠️ {gpsError}</span>
+              <button
+                type="button"
+                onClick={() => setGpsError(null)}
+                className="text-amber-600 hover:text-amber-950 font-bold shrink-0 cursor-pointer p-0.5"
+                title="Dismiss"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Origin selected location preview & View on Map button */}
           {origin && origin.lat != null && (

@@ -194,8 +194,8 @@ export default function MapView({
   livePos,
   onStartLiveRide,
 }) {
-  const defaultCenter = [40.7128, -74.006];
-  const defaultZoom = 5;
+  const defaultCenter = [31.428, 73.125];
+  const defaultZoom = 7;
 
   const [reCenterTrigger, setReCenterTrigger] = React.useState(0);
 
