@@ -227,6 +227,21 @@ function DriveModeCameraController({
         setUserHasPanned(true);
       }
     },
+    touchstart() {
+      if (isDriveMode && !userHasPanned && setUserHasPanned) {
+        setUserHasPanned(true);
+      }
+    },
+    mousedown() {
+      if (isDriveMode && !userHasPanned && setUserHasPanned) {
+        setUserHasPanned(true);
+      }
+    },
+    movestart(e) {
+      if (isDriveMode && !userHasPanned && setUserHasPanned && e.originalEvent) {
+        setUserHasPanned(true);
+      }
+    },
   });
 
   useEffect(() => {
@@ -284,19 +299,38 @@ function MapBoundsUpdater({
 }) {
   const map = useMap();
 
+  // Handle container resizing (e.g. mobile tab switch, orientation change, screen resize)
   useEffect(() => {
-    const handleResize = () => {
-      if (map) {
-        map.invalidateSize({ animate: false });
-      }
+    if (!map) return;
+
+    const handleInvalidate = () => {
+      if (map) map.invalidateSize({ animate: false });
     };
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
+
+    handleInvalidate();
+    const t1 = setTimeout(handleInvalidate, 100);
+    const t2 = setTimeout(handleInvalidate, 350);
+
+    const container = map.getContainer();
+    let resizeObserver = null;
+    if (container && typeof window !== 'undefined' && window.ResizeObserver) {
+      resizeObserver = new ResizeObserver(() => {
+        handleInvalidate();
+      });
+      resizeObserver.observe(container);
+    }
+
+    window.addEventListener('resize', handleInvalidate);
+    window.addEventListener('orientationchange', handleInvalidate);
+
     return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      if (resizeObserver) resizeObserver.disconnect();
+      window.removeEventListener('resize', handleInvalidate);
+      window.removeEventListener('orientationchange', handleInvalidate);
     };
-  }, [map]);
+  }, [map, mobileTab]);
 
   // Handle direct manual location zoom (e.g. user clicked "View on Map" for Faisalabad or hostel)
   useEffect(() => {
@@ -1223,20 +1257,29 @@ export default function MapView({
       <div
         className="w-full h-full relative overflow-hidden"
         style={{
-          perspective: activeDriveMode && is3DMode ? '700px' : 'none',
+          perspective: activeDriveMode && is3DMode && !userHasPanned ? '700px' : 'none',
           perspectiveOrigin: '50% 70%',
+        }}
+        onTouchStart={() => {
+          if (activeDriveMode && !userHasPanned) setUserHasPanned(true);
+        }}
+        onMouseDown={() => {
+          if (activeDriveMode && !userHasPanned) setUserHasPanned(true);
+        }}
+        onWheel={() => {
+          if (activeDriveMode && !userHasPanned) setUserHasPanned(true);
         }}
       >
         <div
           className="w-full h-full transition-transform duration-500 ease-out overflow-hidden"
           style={{
-            transformOrigin: activeDriveMode && is3DMode ? '50% 70%' : 'center center',
+            transformOrigin: activeDriveMode && is3DMode && !userHasPanned ? '50% 70%' : 'center center',
             transform:
-              activeDriveMode && is3DMode && isHeadingUp
+              activeDriveMode && is3DMode && isHeadingUp && !userHasPanned
                 ? `rotateX(48deg) rotate(${-vehicleHeading}deg) scale(1.45)`
-                : activeDriveMode && is3DMode && !isHeadingUp
+                : activeDriveMode && is3DMode && !isHeadingUp && !userHasPanned
                 ? `rotateX(48deg) scale(1.45)`
-                : activeDriveMode && !is3DMode && isHeadingUp
+                : activeDriveMode && !is3DMode && isHeadingUp && !userHasPanned
                 ? `rotate(${-vehicleHeading}deg) scale(1.3)`
                 : 'none',
             transformStyle: 'preserve-3d',

@@ -605,7 +605,7 @@ export default function App() {
 
         {/* Right Area: Interactive Leaflet Map */}
         <section
-          className={`flex-1 h-full min-h-[300px] relative overflow-hidden bg-slate-100 p-0 sm:p-2 sm:rounded-2xl ${
+          className={`flex-1 w-full h-full min-h-[350px] relative overflow-hidden bg-slate-100 p-0 sm:p-2 sm:rounded-2xl ${
             mobileTab === 'panel' ? 'hidden lg:block' : 'block'
           }`}
         >
