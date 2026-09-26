@@ -174,11 +174,17 @@ export default function LocationInput({
 
   // Try browser geolocation to upgrade/replace IP location with precise Wi-Fi coords
   const tryBrowserGeolocation = () => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      console.warn('[GEO] navigator.geolocation not available');
+      return;
+    }
+
+    console.log('[GEO] Requesting browser geolocation (enableHighAccuracy: true)...');
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const { latitude, longitude } = pos.coords;
+        const { latitude, longitude, accuracy } = pos.coords;
+        console.log(`[GEO] ✅ Browser geolocation SUCCESS: lat=${latitude}, lon=${longitude}, accuracy=${accuracy}m`);
 
         // Always set the precise coords immediately — don't wait for reverse geocode
         const fallbackLoc = {
@@ -215,9 +221,10 @@ export default function LocationInput({
             setOrigin(loc);
             setOriginQuery(loc.name);
             if (countryCode && onCountryDetected) onCountryDetected(countryCode);
+            console.log(`[GEO] Reverse geocoded to: ${loc.name}`);
           }
         } catch (err) {
-          console.warn('Reverse geocode notice:', err);
+          console.warn('[GEO] Reverse geocode failed:', err);
           // Raw coords already set above — no problem
         } finally {
           setIsLocatingUser(false);
@@ -225,7 +232,7 @@ export default function LocationInput({
       },
       (err) => {
         // Browser geolocation failed — IP result already applied, just stop spinner
-        console.warn('Browser geolocation notice:', err.message);
+        console.warn(`[GEO] ❌ Browser geolocation FAILED: code=${err.code}, message=${err.message}`);
         setIsLocatingUser(false);
       },
       { timeout: 10000, enableHighAccuracy: true, maximumAge: 0 }
