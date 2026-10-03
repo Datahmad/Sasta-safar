@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "description": "Sasta Safar - Smart Route & Fuel Cost Calculator",
   "scripts": {
-    "start": "node backend/server.js",
-    "server": "cd backend && node server.js",
+    "dev": "cd frontend && npm run dev",
     "client": "cd frontend && npm run dev",
+    "server": "cd backend && node server.js",
+    "start": "node backend/server.js",
     "build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {
